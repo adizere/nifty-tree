@@ -1,0 +1,16 @@
+# Description of this file:
+#
+# On the first line there is the number of cycles x
+# Then there are 2*x lines, each having the following structure:
+# cycle-number cycle-direction-(l) number-of-neighbors neighbor-1 neighbor-2 ... neighbor-n
+# cycle-number cycle-direction-(r) number-of-neighbors neighbor-1 neighbor-2 ... neighbor-n
+# The neighbor-x entry has the following structure: IP":"port
+
+# Sample follows:
+3
+1 l 4 127.0.1.1:45000 127.0.1.1:45001 127.0.1.1:45002 127.0.1.1:45003
+1 r 4 127.0.1.2:45000 127.0.1.2:45001 127.0.1.2:45002 127.0.1.2:45003
+2 l 4 127.0.2.1:45000 127.0.2.1:45001 127.0.2.1:45002 127.0.2.1:45003
+2 r 4 127.0.2.2:45000 127.0.2.2:45001 127.0.2.2:45002 127.0.2.2:45003
+3 l 4 127.0.3.1:45000 127.0.3.1:45001 127.0.3.1:45002 127.0.3.1:45003
+3 r 4 127.0.3.2:45000 127.0.3.2:45001 127.0.3.2:45002 127.0.3.2:45003
