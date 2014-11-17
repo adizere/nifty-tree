@@ -1,12 +1,14 @@
 # Description of this file:
 #
-# On the first line there is the number of cycles x
+# On the first line there is a revision number
+# The second line contains the number of cycles x
 # Then there are 2*x lines, each having the following structure:
 # cycle-number cycle-direction-(l) number-of-neighbors neighbor-1 neighbor-2 ... neighbor-n
 # cycle-number cycle-direction-(r) number-of-neighbors neighbor-1 neighbor-2 ... neighbor-n
 # The neighbor-x entry has the following structure: IP":"port
 
 # Sample follows:
+r4
 3
 1 l 4 127.0.1.1:45000 127.0.1.1:45001 127.0.1.1:45002 127.0.1.1:45003
 1 r 4 127.0.1.2:45000 127.0.1.2:45001 127.0.1.2:45002 127.0.1.2:45003

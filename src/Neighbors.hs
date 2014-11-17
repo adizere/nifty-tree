@@ -17,6 +17,11 @@ getCyclesCount = do
     return . readIgnoringComments $ lines x
 
 
+-- getRevisionNumber :: IO String
+-- getRevisionNumber = do
+
+
+
 readIgnoringComments :: [String] -> String
 readIgnoringComments (x:xs)
     | length x == 0 =
@@ -24,4 +29,4 @@ readIgnoringComments (x:xs)
     | head x == '#' =
             readIgnoringComments xs
     | otherwise     =
-            x
+            x ++ "\n" ++ unlines xs

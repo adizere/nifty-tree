@@ -1,9 +1,8 @@
 module Main where
 
+-- import Streamer.Session
+-- import Streamer.Parser
 
-import Neighbors
-
-
+main :: IO ()
 main = do
-    x <- Neighbors.getCyclesCount
-    putStrLn x
+    print "AAaa yoloho"
