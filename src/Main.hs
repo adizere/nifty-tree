@@ -1,8 +1,11 @@
 module Main where
 
--- import Streamer.Session
--- import Streamer.Parser
+import Streamer.Session
+import Streamer.Parser
+import Streamer.Types
+
+import qualified Data.ByteString.Lazy as BL
 
 main :: IO ()
 main = do
-    print "AAaa yoloho"
+    toParse <- BL.readFile "input.json"
