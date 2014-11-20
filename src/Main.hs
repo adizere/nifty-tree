@@ -15,6 +15,9 @@ sleepTimeMs = 1000000
 main :: IO ()
 main = do
     printAvailableSessions
+    putStrLn "Join a session? Which one?"
+    a <- getLine
+    putStrLn $ "Joining session " ++ a
     threadDelay sleepTimeMs
     main
 
