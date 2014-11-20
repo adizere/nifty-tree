@@ -1,6 +1,7 @@
 module Main where
 
-import Streamer.Session
+
+import Streamer.Session (printAvailableSessions)
 import Streamer.Parser
 import Streamer.Types
 import qualified Data.ByteString.Lazy as BL

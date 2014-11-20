@@ -1,4 +1,8 @@
-module Streamer.Session where
+module Streamer.Session
+( startSession
+, printAvailableSessions
+) where
+
 
 import Streamer.Types
 import Streamer.SessionManager
