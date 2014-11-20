@@ -2,25 +2,26 @@
 
 import Data.Text
 import Data.Aeson
--- import Data.Functor
 import Control.Monad
 import Control.Applicative
 
 
-data Person = Person
-    { name :: Text
-    , age  :: Int
+data Neighbor = Neighbor
+    { ip :: Text
+    , port  :: Int
+    , revision :: Int
     } deriving Show
 
 
-instance FromJSON Person where
-    parseJSON (Object v) = Person <$>
-                           v .: "name" <*>
-                           v .: "age"
+instance FromJSON Neighbor where
+    parseJSON (Object v) = Neighbor <$>
+                           v .: "ip" <*>
+                           v .: "port" <*>
+                           v .: "revision"
 
     parseJSON _          = mzero
 
 
 main = do
-    let a = decode "{\"name\":\"Joe\",\"age\":12}" :: Maybe Person
+    let a = decode "{\"ip\":\"127.0.0.1\",\"port\":12, \"revision\":1}" :: Maybe Neighbor
     print a

@@ -1,10 +1,18 @@
 {-# LANGUAGE OverloadedStrings #-}
 
+module Streamer.Parser where
+
+import Streamer.Types
+
 import Data.Text
 import Data.Aeson
--- import Streamer.Types
+import Control.Monad
+import Control.Applicative
 
 
--- instance FromJSON PullNode where
---     parseJSON (Object r) = PullNode <$>
---                             r .: "revision"
+instance FromJSON PullNode where
+    parseJSON (Object v) = PullNode <$>
+                           v .: "ip" <*>
+                           v .: "port"
+
+    parseJSON _          = mzero
