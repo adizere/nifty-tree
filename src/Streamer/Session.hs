@@ -1,6 +1,6 @@
 module Streamer.Session
-( startSession
-, printAvailableSessions
+( joinSession
+, getAllSessions
 ) where
 
 
@@ -8,7 +8,6 @@ import Streamer.Types
 import Streamer.SessionManager
 import Streamer.Util
 import Data.Char
-import Data.List
 import System.Directory
 
 
@@ -18,10 +17,16 @@ sessionDirectory = "."
 
 
 data Session = Session
-    { id        :: Int
+    { id        :: String
     , pullNodes :: PullNodesList
     , manager   :: SessionManager
-    }  deriving (Eq, Show)
+    } deriving (Eq, Show)
+
+
+joinSession :: String -> IO ()
+joinSession a = do
+    putStrLn $ "Joining session " ++ a
+    -- let s = Session
 
 
 startSession :: Session -> Bool
@@ -29,12 +34,9 @@ startSession _ =
     True
 
 
-printAvailableSessions :: IO ()
-printAvailableSessions = do
-    putStrLn "Available sessions are.."
-    ids <- getSessionsFromDirectory sessionDirectory
-    -- let b = foldl (\acc cid -> acc ++ "- " ++ cid ++ "\n" ) "" ids
-    putStrLn $ intercalate ", " ids
+getAllSessions :: IO [String]
+getAllSessions = do
+    getSessionsFromDirectory sessionDirectory
 
 
 getSessionsFromDirectory :: FilePath -> IO [String]
@@ -48,5 +50,5 @@ getSessionIdFromFileName :: String -> String
 getSessionIdFromFileName fileName
     | length fileName <= 12         = ""
     | take 7 fileName /= "session"  = ""
-    | otherwise                     = 
+    | otherwise                     =
         [ x | x <- snd . splitAt 7 $ fileName, isDigit x]

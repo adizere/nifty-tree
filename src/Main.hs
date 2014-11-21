@@ -1,12 +1,15 @@
 module Main where
 
 
-import Streamer.Session (printAvailableSessions)
+import Streamer.Session (getAllSessions, joinSession)
+import Streamer.Util
 import Streamer.Parser
 import Streamer.Types
 import qualified Data.ByteString.Lazy as BL
 import Data.Aeson
-import Control.Concurrent
+import Data.List
+import Control.Monad        -- "forever"
+import qualified Control.Exception as CE
 
 
 -- 1 second sleep time
@@ -15,12 +18,42 @@ sleepTimeMs = 1000000
 
 main :: IO ()
 main = do
-    printAvailableSessions
+    mainLoop []
+
+
+mainLoop :: [String] -> IO ()
+mainLoop runningSessions = do
+    putStrLn $ "---\nRunning sessions are: " ++ (show runningSessions)
+    ids <- getAllSessions
+    putStr "The available sessions are: "
+    putStrLn $ intercalate ", " ids
     putStrLn "Join a session? Which one?"
-    a <- getLine
-    putStrLn $ "Joining session " ++ a
-    threadDelay sleepTimeMs
-    main
+    maybeId <- readSessionId
+    if maybeId `elem` ids
+        then if maybeId `elem` runningSessions
+                then do putStrLn $ "err: Session '"
+                              ++ maybeId
+                              ++ "' is already running!"
+                        mainLoop runningSessions
+                else do doJoinSession maybeId
+                        mainLoop $ maybeId:runningSessions
+        else do putStrLn $ "err: The supplied string '"
+                        ++ maybeId
+                        ++ "' is not a valid session id!"
+                mainLoop runningSessions
+
+
+doJoinSession :: String -> IO ()
+doJoinSession sid =
+    joinSession sid
+
+
+readSessionId :: IO String
+readSessionId = do
+    line <- getLine
+    if length line == 0
+        then readSessionId
+        else return . head . words $ line
 
 
 _dummyParsePullNode = do
