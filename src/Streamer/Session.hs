@@ -1,6 +1,8 @@
 module Streamer.Session
 ( joinSession
 , getAllSessions
+, SessionActor
+, startSessionActor
 ) where
 
 
@@ -9,6 +11,7 @@ import Streamer.SessionManager
 import Streamer.Util
 import Data.Char
 import System.Directory
+import Control.Concurrent
 
 
 -- directory with sessions
@@ -52,3 +55,20 @@ getSessionIdFromFileName fileName
     | take 7 fileName /= "session"  = ""
     | otherwise                     =
         [ x | x <- snd . splitAt 7 $ fileName, isDigit x]
+
+
+
+data SessionActor = SessionActor
+    { sessionActorId :: String
+    , threadId :: ThreadId
+    } deriving (Show)
+
+-- instance Show SessionActor where
+--     show (SessionActor {sessionActorId=sId, threadId=tId}) =
+--             show sId ++ "/" ++ show tId
+
+startSessionActor :: String -> IO SessionActor
+startSessionActor actorId = do
+    tId <- forkIO (do threadDelay 100000
+                      putStrLn "FINISHED!!!")
+    return SessionActor {sessionActorId=actorId,threadId=tId}
