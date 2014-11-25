@@ -3,7 +3,6 @@
 module Streamer.Types where
 
 import qualified Data.ByteString.Lazy   as L
-import Data.Text
 
 
 data PullNode = PullNode

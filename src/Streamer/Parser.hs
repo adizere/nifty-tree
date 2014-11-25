@@ -4,7 +4,6 @@ module Streamer.Parser where
 
 import Streamer.Types
 
-import Data.Text
 import Data.Aeson
 import Control.Monad
 import Control.Applicative
