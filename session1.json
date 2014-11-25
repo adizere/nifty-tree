@@ -1,0 +1,19 @@
+{   "neighborListRevision": 1,
+    "list":[
+        {   "neighborIp": "127.0.0.1",
+            "neighborPort": 12,
+            "cycleNumber": 1,
+            "cycleDirection": 1
+        },
+        {   "neighborIp": "127.0.0.2",
+            "neighborPort": 13,
+            "cycleNumber": 1,
+            "cycleDirection": 1
+        },
+        {   "neighborIp": "127.0.0.3",
+            "neighborPort": 14,
+            "cycleNumber": 1,
+            "cycleDirection": 1
+        }
+    ]
+}

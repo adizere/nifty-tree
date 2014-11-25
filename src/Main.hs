@@ -2,14 +2,11 @@ module Main where
 
 
 import Streamer.Session ( getAllSessions
-                        , extractSessionIdsFromSession
+                        , getSessionIdsFromSessionHandles
                         , startSession
-                        , Session )
-import Streamer.Types
-import Streamer.Parser()
-import Data.Aeson
+                        , SessionHandle )
+import Streamer.PullNodes
 import Data.List
-import qualified Data.ByteString.Lazy as BL
 
 
 -- 1 second sleep time
@@ -23,19 +20,19 @@ main = do
 
 
 --
--- handles Session selection and Session starting
+-- takes care of Session selection and Session starting
 --
-mainLoop :: [Session] -> String -> IO ()
-mainLoop runningSessions startNewSessionId = do
-    putStrLn $ "The running sessions are: " ++ (show runningSessions)
+mainLoop :: [SessionHandle] -> String -> IO ()
+mainLoop sessionHandles startNewSessionId = do
+    putStrLn $ "The running sessions are: " ++ (show sessionHandles)
     allSessionIds <- getAllSessions
-    let runningSessionIds = extractSessionIdsFromSession runningSessions
+    let runningSessionIds = getSessionIdsFromSessionHandles sessionHandles
     -- checks if it should start a new Session
     if length startNewSessionId > 0
         then do
             -- fires up another session, then calls itself with revised arguments
             newSession <- doStartSession startNewSessionId
-            mainLoop (newSession:runningSessions) ""
+            mainLoop (newSession:sessionHandles) ""
         else do
             -- allows the user to choose a Session to start
             maybeId <- chooseNewSessionId allSessionIds runningSessionIds
@@ -47,10 +44,10 @@ mainLoop runningSessions startNewSessionId = do
             case can of
                 -- if the choice is valid, then the function calls itself with
                 -- the chosen Session Id
-                True  -> mainLoop runningSessions maybeId
+                True  -> mainLoop sessionHandles maybeId
                 False -> putStrLn msg
             -- calls itself in case of invalid SessionId choice
-            mainLoop runningSessions ""
+            mainLoop sessionHandles ""
 
 
 -- presents the runningSessions and allSessions information
@@ -78,7 +75,8 @@ canStartSession sId runningIds allIds =
                         ++ "' does not exist!")
 
 
-doStartSession :: String -> IO Session
+-- starts a Session and returns the SessionHandle for it
+doStartSession :: String -> IO SessionHandle
 doStartSession sid = do
     a <- startSession sid
     return a
@@ -90,11 +88,3 @@ readSessionId = do
     if length line == 0
         then readSessionId
         else return . head . words $ line
-
-
--- to be (re)moved
-_dummyParsePullNode :: IO ()
-_dummyParsePullNode = do
-    toParse <- BL.readFile "input.json"
-    let a = decode $ toParse :: Maybe PullNode
-    print a

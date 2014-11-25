@@ -1,8 +1,10 @@
 module Streamer.SessionManager where
 
 import Streamer.Types
+import Streamer.PullNodes
+
 
 data SessionManager = SessionManager
-    { pullNodes :: PullNodesList
-    , frames    :: [Frame]
+    { sessionPullNodes  :: PullNodesList
+    , frames            :: [Frame]
     }  deriving (Eq, Show)

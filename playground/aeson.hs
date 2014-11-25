@@ -10,7 +10,7 @@ data Neighbor = Neighbor
     { ip :: Text
     , port  :: Int
     , revision :: Int
-    } deriving Show
+    } deriving (Eq, Show)
 
 
 instance FromJSON Neighbor where
@@ -21,7 +21,17 @@ instance FromJSON Neighbor where
 
     parseJSON _          = mzero
 
+data NeighborList = NeighborList
+  { list :: [Neighbor]
+  } deriving (Eq, Show)
+
+
+instance FromJSON NeighborList where
+  parseJSON (Object v) = NeighborList <$>
+                          v .: "list"
+
 
 main = do
-    let a = decode "{\"ip\":\"127.0.0.1\",\"port\":12, \"revision\":1}" :: Maybe Neighbor
+    -- let a = decode "{\"ip\":\"127.0.0.1\",\"port\":12, \"revision\":1}" :: Maybe Neighbor
+    let a = decode "{\"list\":[{\"ip\":\"127.0.0.1\",\"port\":12,\"revision\":1},{\"ip\":\"127.0.0.2\",\"port\":13,\"revision\":1},{\"ip\":\"127.0.0.3\",\"port\":14,\"revision\":1}]}" :: Maybe NeighborList
     print a
