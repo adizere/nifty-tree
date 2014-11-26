@@ -16,7 +16,7 @@ extra-source-files:  README.md
 cabal-version:       >=1.10
 
 executable nifty-tree
-  ghc-options:         -Wall
+  ghc-options:         -Wall -threaded
   main-is:             Main.hs
   -- other-modules:       
   other-extensions:    OverloadedStrings

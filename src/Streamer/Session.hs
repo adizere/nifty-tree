@@ -3,6 +3,7 @@ module Streamer.Session
 , startSession
 , getAllSessions
 , getSessionIdsFromSessionHandles
+, finishedMVar
 , SessionHandle
 ) where
 
@@ -13,6 +14,7 @@ import Data.Char
 import System.Directory
 import Control.Concurrent
 import Control.Monad (forever)
+import Control.Exception.Base (finally)
 
 
 ---------------------------------------
@@ -28,15 +30,25 @@ sessionDirectory = "."
 data SessionHandle = SessionHandle
     { runningSessionId  :: String -- the same significance as Session.sessionId
     , threadId          :: ThreadId
-    } deriving (Eq, Show)
+    , finishedMVar      :: MVar (Int)
+    } deriving (Eq)
 
+
+instance Show SessionHandle where
+    show SessionHandle { runningSessionId = r
+                       , threadId = t
+                       , finishedMVar = _
+                       } = "SessionHandle (id=" ++ (show r)
+                        ++ "," ++ (show t) ++ ")"
 
 startSession :: String -> IO SessionHandle
 startSession sId = do
+    m <- newEmptyMVar
     -- spark a new thread, which will handle exclusively the session with id sId
-    tId <- forkIO $ sessionMainLoop sId
+    tId <- forkIO (finally (sessionMainLoop sId) (putMVar m 1))
     return SessionHandle { runningSessionId = sId
-                         , threadId         = tId }
+                         , threadId         = tId
+                         , finishedMVar     = m }
 
 
 getAllSessions :: IO [String]
@@ -94,7 +106,7 @@ assembleSessionFilePath sId =
 -- the main function executed by every Session
 sessionMainLoop :: String -> IO ()
 sessionMainLoop sId = forever $ do
-    threadDelay 100000
+    threadDelay 1000000
     session <- assembleSession sId
     putStrLn $ sId ++ " FINISHED!!" ++ (show session)
 
@@ -102,5 +114,6 @@ sessionMainLoop sId = forever $ do
 assembleSession :: String -> IO Session
 assembleSession sId = do
     let sessionFileName = assembleSessionFilePath sId
+    putStrLn $ "Reading session from file " ++ sessionFileName
     selectedNodes <- selectPullNodesFromFile sessionFileName
     return Session { sessionId = sId, pullNodes = selectedNodes}
