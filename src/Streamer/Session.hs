@@ -28,14 +28,14 @@ sessionDirectory = "."
 
 -- each SessionHandle describes a running session
 data SessionHandle = SessionHandle
-    { runningSessionId  :: String -- the same significance as Session.sessionId
+    { shSessionId  :: String -- the same significance as Session.ssId
     , threadId          :: ThreadId
     , finishedMVar      :: MVar (Int)
     } deriving (Eq)
 
 
 instance Show SessionHandle where
-    show SessionHandle { runningSessionId = r
+    show SessionHandle { shSessionId = r
                        , threadId = t
                        , finishedMVar = _
                        } = "SessionHandle (id=" ++ (show r)
@@ -46,7 +46,7 @@ startSession sId = do
     m <- newEmptyMVar
     -- spark a new thread, which will handle exclusively the session with id sId
     tId <- forkIO (finally (sessionMainLoop sId) (putMVar m 1))
-    return SessionHandle { runningSessionId = sId
+    return SessionHandle { shSessionId = sId
                          , threadId         = tId
                          , finishedMVar     = m }
 
@@ -59,7 +59,7 @@ getAllSessions = do
 getSessionIdsFromSessionHandles :: [SessionHandle] -> [String]
 getSessionIdsFromSessionHandles iSessions =
     -- use the accessor function to extract the sessionId from each iSession
-    [ runningSessionId session | session <- iSessions ]
+    [ shSessionId session | session <- iSessions ]
 
 
 ---------------------------------------
@@ -68,8 +68,8 @@ getSessionIdsFromSessionHandles iSessions =
 
 
 data Session = Session
-    { sessionId :: String
-    , pullNodes :: PullNodesList
+    { ssId :: String
+    , ssPullNodes :: PullNodesList
     -- , manager   :: SessionManager
     } deriving (Eq, Show)
 
@@ -107,13 +107,21 @@ assembleSessionFilePath sId =
 sessionMainLoop :: String -> IO ()
 sessionMainLoop sId = forever $ do
     threadDelay 1000000
-    session <- assembleSession sId
-    putStrLn $ sId ++ " FINISHED!!" ++ (show session)
+    mSession <- assembleSession sId
+    case mSession of
+        Just session -> putStrLn $ sId ++ " session: " ++ (show session)
+        Nothing -> do
+            putStrLn "err: Couldn't read the session file!"
+            return ()
 
 
-assembleSession :: String -> IO Session
+assembleSession :: String -> IO (Maybe Session)
 assembleSession sId = do
     let sessionFileName = assembleSessionFilePath sId
     putStrLn $ "Reading session from file " ++ sessionFileName
-    selectedNodes <- selectPullNodesFromFile sessionFileName
-    return Session { sessionId = sId, pullNodes = selectedNodes}
+    mPNodes <- maybeGetPullNodes sessionFileName
+    case mPNodes of
+        Just pNodes ->
+                return $ Just Session { ssId = sId, ssPullNodes = pNodes}
+        Nothing ->
+                return Nothing

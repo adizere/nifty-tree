@@ -3,7 +3,6 @@
 module Streamer.Neighbors where
 
 
-import Data.Text
 import Data.Aeson
 import Control.Monad
 import Control.Applicative
@@ -11,38 +10,42 @@ import qualified Data.ByteString.Lazy as BL
 
 
 data Neighbor = Neighbor
-    { neighborIp :: Text
-    , neighborPort  :: Int
-    , cycleNumber   :: Int
-    , cycleDirection :: Int
+    { nbIp              :: String
+    , nbPort            :: Int
+    , nbCycleNumber     :: Int
+    , nbCycleDirection  :: Int
     } deriving (Eq, Show)
 
 
 instance FromJSON Neighbor where
     parseJSON (Object v) = Neighbor <$>
-                           v .: "neighborIp" <*>
-                           v .: "neighborPort" <*>
-                           v .: "cycleNumber" <*>
-                           v .: "cycleDirection"
+                           v .: "nbIp" <*>
+                           v .: "nbPort" <*>
+                           v .: "nbCycleNumber" <*>
+                           v .: "nbCycleDirection"
 
     parseJSON _ = mzero
 
 
-data NeighborList = NeighborList
-    { list     :: [Neighbor]
-    , neighborListRevision :: Int
+data OverlayInfo = OverlayInfo
+    { oiNeighbors   :: [Neighbor]
+    , oiRevision    :: Int
+    , oiSourceIp    :: String
+    , oiSourcePort  :: Int
     } deriving (Eq, Show)
 
 
-instance FromJSON NeighborList where
-    parseJSON (Object v) = NeighborList <$>
-                          v .: "list" <*>
-                          v .: "neighborListRevision"
+instance FromJSON OverlayInfo where
+    parseJSON (Object v) = OverlayInfo <$>
+                          v .: "oiNeighbors" <*>
+                          v .: "oiRevision" <*>
+                          v .: "oiSourceIp" <*>
+                          v .: "oiSourcePort"
 
     parseJSON _ = mzero
 
 
-getAllNeighboringNodes :: FilePath -> IO (Maybe NeighborList)
-getAllNeighboringNodes sessionFile = do
+maybeGetOverlayInfo :: FilePath -> IO (Maybe OverlayInfo)
+maybeGetOverlayInfo sessionFile = do
     toParse <- BL.readFile sessionFile
-    return (decode $ toParse :: Maybe NeighborList)
+    return (decode $ toParse :: Maybe OverlayInfo)

@@ -1,19 +1,36 @@
-{   "neighborListRevision": 1,
-    "list":[
-        {   "neighborIp": "127.0.0.1",
-            "neighborPort": 12,
-            "cycleNumber": 1,
-            "cycleDirection": 1
+{   "oiRevision": 1,
+    "oiSourceIp": "127.1.1.1",
+    "oiSourcePort": 9999,
+    "oiNeighbors":[
+        {   "nbIp": "127.1.1.1",
+            "nbPort": 9999,
+            "nbCycleNumber": 1,
+            "nbCycleDirection": 1
         },
-        {   "neighborIp": "127.0.0.2",
-            "neighborPort": 13,
-            "cycleNumber": 1,
-            "cycleDirection": 1
+        {   "nbIp": "127.0.0.2",
+            "nbPort": 2,
+            "nbCycleNumber": 1,
+            "nbCycleDirection": 1
         },
-        {   "neighborIp": "127.0.0.3",
-            "neighborPort": 14,
-            "cycleNumber": 1,
-            "cycleDirection": 1
+        {   "nbIp": "127.0.0.3",
+            "nbPort": 3,
+            "nbCycleNumber": 1,
+            "nbCycleDirection": 1
+        },
+        {   "nbIp": "127.0.0.4",
+            "nbPort": 4,
+            "nbCycleNumber": 1,
+            "nbCycleDirection": 1
+        },
+        {   "nbIp": "127.0.0.5",
+            "nbPort": 5,
+            "nbCycleNumber": 1,
+            "nbCycleDirection": 1
+        },
+        {   "nbIp": "127.0.0.6",
+            "nbPort": 6,
+            "nbCycleNumber": 1,
+            "nbCycleDirection": 1
         }
     ]
 }
