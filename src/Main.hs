@@ -4,7 +4,7 @@ module Main where
 import Streamer.Session ( getAllSessions
                         , getSessionIdsFromSessionHandles
                         , startSession
-                        , finishedMVar
+                        , shMVar
                         , SessionHandle )
 
 import Data.List
@@ -96,10 +96,10 @@ readSessionId = do
 
 
 -- takes a list of SessionHandles
--- checks if any of them finished (by looking at the finishedMVar field)
+-- checks if any of them finished (by looking at the shMVar field)
 -- removes any finished SessionHandle, and returns the updated list
 checkRunningSessions :: [SessionHandle] -> IO [SessionHandle]
 checkRunningSessions handles = do
     -- filter the list of handles
-    -- only keep those handles whose finishedMVar is empty
-    filterM (\h -> isEmptyMVar (finishedMVar h)) handles
+    -- only keep those handles whose shMVar is empty
+    filterM (\h -> isEmptyMVar (shMVar h)) handles

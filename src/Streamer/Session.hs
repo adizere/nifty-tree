@@ -3,13 +3,14 @@ module Streamer.Session
 , startSession
 , getAllSessions
 , getSessionIdsFromSessionHandles
-, finishedMVar
+, shMVar
 , SessionHandle
 ) where
 
 
 import Streamer.PullNodes
 import Streamer.SessionManager
+
 import Data.Char
 import System.Directory
 import Control.Concurrent
@@ -28,27 +29,24 @@ sessionDirectory = "."
 
 -- each SessionHandle describes a running session
 data SessionHandle = SessionHandle
-    { shSessionId  :: String -- the same significance as Session.ssId
-    , threadId          :: ThreadId
-    , finishedMVar      :: MVar (Int)
+    { shSessionId   :: String -- the same significance as Session.ssId
+    , shThreadId    :: ThreadId
+    , shMVar        :: MVar (Int)
     } deriving (Eq)
 
 
 instance Show SessionHandle where
-    show SessionHandle { shSessionId = r
-                       , threadId = t
-                       , finishedMVar = _
-                       } = "SessionHandle (id=" ++ (show r)
-                        ++ "," ++ (show t) ++ ")"
+    show SessionHandle { shSessionId = r , shThreadId = t } =
+        "SessionHandle (id=" ++ (show r) ++ "," ++ (show t) ++ ")"
 
 startSession :: String -> IO SessionHandle
 startSession sId = do
     m <- newEmptyMVar
     -- spark a new thread, which will handle exclusively the session with id sId
     tId <- forkIO (finally (sessionMainLoop sId) (putMVar m 1))
-    return SessionHandle { shSessionId = sId
-                         , threadId         = tId
-                         , finishedMVar     = m }
+    return SessionHandle { shSessionId  = sId
+                         , shThreadId   = tId
+                         , shMVar       = m }
 
 
 getAllSessions :: IO [String]
@@ -68,8 +66,8 @@ getSessionIdsFromSessionHandles iSessions =
 
 
 data Session = Session
-    { ssId :: String
-    , ssPullNodes :: PullNodesList
+    { ssId          :: String
+    , ssPullNodes   :: PullNodesList
     -- , manager   :: SessionManager
     } deriving (Eq, Show)
 
@@ -97,7 +95,7 @@ getSessionIdFromFileName fileName
 
 
 -- expects the id of a session
--- returns the filename where that
+-- returns the filename where that session is described (.json file)
 assembleSessionFilePath :: String -> String
 assembleSessionFilePath sId =
     sessionDirectory ++ "/" ++ "session" ++ sId ++ ".json"

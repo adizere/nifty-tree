@@ -5,10 +5,6 @@ module Streamer.PullNodes where
 
 import Streamer.Neighbors
 
-import Control.Monad
-import Control.Applicative
-import Data.Aeson
-
 
 data PullNode = PullNode
     { pnIp      :: String
