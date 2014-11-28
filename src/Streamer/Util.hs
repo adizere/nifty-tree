@@ -3,38 +3,48 @@ module Streamer.Util where
 
 import Data.List        -- for folds
 import Data.Maybe       -- for listToMaybe
-import System.Random
+import System.Random    -- for
+import qualified Data.Map as DM
 
 
--- returns the last n elements of list xs
+-- | Returns the last n elements of a list.
 lastN' :: Int -> [a] -> [a]
 lastN' n xs = foldl' (const . drop 1) xs (drop n xs)
 
 
--- parses a String into Just a or into Nothing
--- usage: to obtain a Int from a stdin line do this
---      line <- getLine
---      let res = (maybeRead line :: Maybe Int)
+-- | Parses a String into Just a or into Nothing
+--
+-- For example, to obtain an Int from a stdin line,
+--
+-- > line <- getLine
+-- > let res = (maybeRead line :: Maybe Int)
+--
+-- > case res of
+-- >    Just v  -> *do something with the Int v*
+-- >    Nothing -> ...
 maybeRead :: Read a => String -> Maybe a
 maybeRead val = fmap fst . listToMaybe . reads $ val
 
 
--- Generates multiple random numbers distributed within a closed interval
--- Takes as arguments the interval as a tuple and the count of rand numbers
--- that it should generate.
-getRandomNumbers :: (Int, Int) -> Int -> IO [Int]
-getRandomNumbers (lo, hi) count = do
-    _getRandomNumbers (lo, hi) count []
+-- | /O(n*log n)/. Shuffles the elements of a list in a random order. Original
+-- source code at: https://www.haskell.org/haskellwiki/Random_shuffle
+--
+-- For example,
+-- > g <- getStdGen
+-- > let (l, gen) = shuffle g $ [1..100]
+-- This will shuffle the 100 elements given as a second argument.
+shuffle :: RandomGen g => g -> [a] -> ([a], g)
+shuffle gen [] = ([], gen)
+shuffle gen l =
+    toElems $ foldl _shuffleStep (initial (head l) gen) (numerate (tail l))
+    where
+        toElems (x, y) = (DM.elems x, y)
+        numerate = zip [1..]
+        initial x gen = (DM.singleton 0 x, gen)
 
 
-_getRandomNumbers :: (Int, Int) -> Int -> [Int] -> IO [Int]
-_getRandomNumbers (lo, hi) 0 accum = do return accum
-_getRandomNumbers (lo, hi) cnt accum = do
-    rnd <- boundedRandomNumber (lo, hi)
-    let uCnt = cnt-1
-    _getRandomNumbers (lo, hi) uCnt $ rnd:accum
-
-
-boundedRandomNumber :: (Int, Int) -> IO Int
-boundedRandomNumber (lo, hi) = do
-    getStdRandom (randomR (lo,hi))
+-- | Helper function for the 'shuffle' algorithm.
+_shuffleStep :: RandomGen g => (DM.Map Int a, g) -> (Int, a) -> (DM.Map Int a, g)
+_shuffleStep (m, gen) (i, x) = ((DM.insert j x . DM.insert i (m DM.! j)) m, gen')
+    where
+        (j, gen') = randomR (0, i) gen
