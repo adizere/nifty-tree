@@ -31,6 +31,16 @@
             "nbPort": 6,
             "nbCycleNumber": 1,
             "nbCycleDirection": 1
+        },
+        {   "nbIp": "192.168.112.113",
+            "nbPort": 6,
+            "nbCycleNumber": 2,
+            "nbCycleDirection": 1
+        },
+        {   "nbIp": "192.168.0.1",
+            "nbPort": 6,
+            "nbCycleNumber": 2,
+            "nbCycleDirection": 2
         }
     ]
 }

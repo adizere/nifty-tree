@@ -5,6 +5,10 @@ import Streamer.PullNodes
 
 
 data SessionManager = SessionManager
-    { sessionPullNodes  :: PullNodesList
-    , frames            :: [Frame]
-    }  deriving (Eq, Show)
+    { smPullNodes   :: PullNodesList
+    , smFrames      :: [Frame]
+    }  deriving (Eq)
+
+
+instance Show SessionManager where
+    show sm = "{smFrames = " ++ (show $ smFrames sm) ++ " }"

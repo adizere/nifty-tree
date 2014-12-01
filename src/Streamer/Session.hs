@@ -68,7 +68,7 @@ getSessionIdsFromSessionHandles iSessions =
 data Session = Session
     { ssId          :: String
     , ssPullNodes   :: PullNodesList
-    -- , manager   :: SessionManager
+    , manager       :: SessionManager
     } deriving (Eq, Show)
 
 
@@ -107,8 +107,8 @@ sessionMainLoop sId = forever $ do
     threadDelay 1000000
     mSession <- assembleSession sId
     case mSession of
-        Just session -> putStrLn $ sId ++ " session: " ++ (show session)
-        Nothing -> do
+        Just session    -> putStrLn $ sId ++ " session: " ++ (show session)
+        Nothing         -> do
             putStrLn "err: Couldn't read the session file!"
             return ()
 
@@ -119,7 +119,10 @@ assembleSession sId = do
     putStrLn $ "Reading session from file " ++ sessionFileName
     mPNodes <- maybeGetPullNodes sessionFileName
     case mPNodes of
-        Just pNodes ->
-                return $ Just Session { ssId = sId, ssPullNodes = pNodes}
+        Just pNodes -> do
+                let mgr = SessionManager {smPullNodes = pNodes, smFrames = []}
+                return $ Just Session { ssId = sId
+                                      , ssPullNodes = pNodes
+                                      , manager = mgr}
         Nothing ->
                 return Nothing
