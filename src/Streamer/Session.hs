@@ -107,8 +107,10 @@ sessionMainLoop sId = forever $ do
     threadDelay 1000000
     mSession <- assembleSession sId
     case mSession of
-        Just session    -> putStrLn $ sId ++ " session: " ++ (show session)
-        Nothing         -> do
+        Just ss     -> do
+            putStrLn $ sId ++ " session: " ++ (show ss)
+            -- pollSession ss
+        Nothing     -> do
             putStrLn "err: Couldn't read the session file!"
             return ()
 
@@ -126,3 +128,4 @@ assembleSession sId = do
                                       , manager = mgr}
         Nothing ->
                 return Nothing
+
