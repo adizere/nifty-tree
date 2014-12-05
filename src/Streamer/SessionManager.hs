@@ -1,8 +1,10 @@
 module Streamer.SessionManager where
 
-import Streamer.Types
+
+import Streamer.Frame
 import Streamer.PullNodes
-import Streamer.Util (maybeRead)
+import Streamer.Util        (maybeRead)
+import Streamer.HTTPClient  (doRequest, constructURL)
 
 import System.IO ( Handle
                  , IOMode(ReadMode)
@@ -15,6 +17,7 @@ import Control.Concurrent (threadDelay)
 import Control.Concurrent.BoundedChan
 import Control.Concurrent (forkIO)
 import Data.Maybe
+import qualified Data.ByteString.Lazy as L
 
 
 -- Path to the file holding the list of digests
@@ -52,50 +55,40 @@ startSessionManager sManager = do
     _    <- forkIO (consumeDgstFile h chan 0)
     forever $ do
         digestLine <- readChan chan
+        let activeNode = pnlActiveNode $ smPullNodes sManager
         putStrLn $ "Pulling a frame using meta " ++ (show digestLine)
-        let b = pullFrame sManager digestLine
-        putStrLn $ "Status : " ++ (show b)
+        mFrame <- pullFrame activeNode digestLine
+        putStrLn $ "Status : " ++ (show mFrame)
 
 
-pullFrame :: SessionManager -> String -> Bool
-pullFrame sManager digestLine
-        | isJust maybeFmTuple =
-            doPullOneFrame sManager $ fromJust maybeFmTuple
-        | otherwise = False
-        where
-            maybeFmTuple = digestLineToFrameMetadata digestLine
+pullFrame :: PullNode -> String -> IO (Maybe Frame)
+pullFrame node digestLine = do
+        let maybeFmTuple = digestLineToFrameMetadata digestLine
+        if isJust maybeFmTuple
+            then do
+                let (seqNr, digest) = fromJust maybeFmTuple
+                bytes <- pullBytes node seqNr
+                if verifyDigest digest bytes == True
+                    then return $
+                            Just Frame { frSeqNr     = seqNr
+                                       , frDigest    = digest
+                                       , frContent   = bytes }
+                    else return Nothing
+            else return Nothing
 
 
--- | Takes a line from the digests file and parses it, yielding a sequence
--- number and the associated digest.
---
--- For example,
--- >    digestLineToFrameMetadata
---          "2 076a27c79e5ace2a3d47f9dd2e83e4ff6ea8872b3c2218f66c92b89b55f36560"
--- will output the following tuple:
--- > ("2", "076a27c79e5ace2a3d47f9dd2e83e4ff6ea8872b3c2218f66c92b89b55f36560")
-digestLineToFrameMetadata :: String -> Maybe (Int, String)
-digestLineToFrameMetadata "" = Nothing
-digestLineToFrameMetadata line
-    | (length items == 2) && (isJust seqNr) && (length digest == 64) =
-        Just (fromJust seqNr, digest)
-    | otherwise = Nothing
-    where
-        items = words line
-        seqNr = maybeRead $ items!!0 :: Maybe Int
-        digest = items!!1
-
-
--- | Pulls a frame from the active node. Returns only when it cannot pull the
--- frame from the active node. Various reasons can account for this: the active
--- node contains corrupted frames, it has no frames at all, it is too slow, etc.
---
--- This function returns a string indicating the reason why it stopped pulling
--- frames from the active node.
-doPullOneFrame :: SessionManager -> (Int, String) -> Bool
-doPullOneFrame sManager (seqNr, digest) =
-    -- putStrLn $ "Pulling frame " ++ seqNr ++ " with digest " ++ digest
-    True
+-- | Pulls a frame from a given node. Returns a Lazy Bytestring containing the
+-- data that was pulled. In case of error, the Bytestring is empty.
+-- Various reasons can cause errors: the node contains corrupted frames, it has
+-- no frames at all, has no running http server, etc.
+pullBytes :: PullNode -> Int -> IO (L.ByteString)
+pullBytes node seqNr = do
+    result <- doRequest $ constructURL node seqNr
+    case result of
+        Just bytes -> return bytes
+        otherwise -> do
+            putStrLn "Error executing request"
+            return L.empty
 
 
 -- | Consumes lines from a digest file and appends the lines to a BoundedChan.
@@ -125,3 +118,23 @@ consumeDgstFile h c skipNr = do
                 then consumeDgstFile h c $ skipNr - 1
                 else writeChan c line
     consumeDgstFile h c 0
+
+
+-- | Takes a line from the digests file and parses it, yielding a sequence
+-- number and the associated digest.
+--
+-- For example,
+-- >    digestLineToFrameMetadata
+--          "2 076a27c79e5ace2a3d47f9dd2e83e4ff6ea8872b3c2218f66c92b89b55f36560"
+-- will output the following tuple:
+-- > ("2", "076a27c79e5ace2a3d47f9dd2e83e4ff6ea8872b3c2218f66c92b89b55f36560")
+digestLineToFrameMetadata :: String -> Maybe (Int, String)
+digestLineToFrameMetadata "" = Nothing
+digestLineToFrameMetadata line
+    | (length items == 2) && (isJust seqNr) && (length digest == 64) =
+        Just (fromJust seqNr, digest)
+    | otherwise = Nothing
+    where
+        items = words line
+        seqNr = maybeRead $ items!!0 :: Maybe Int
+        digest = items!!1
