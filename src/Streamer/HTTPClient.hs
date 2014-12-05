@@ -11,6 +11,7 @@ import qualified Data.ByteString.Lazy as L
 
 doRequest :: String -> IO (Maybe L.ByteString)
 doRequest url = do
+    putStrLn $ "Executing request for URL: " ++ url
     rsp <- simpleHTTP $ getLazyRequest url
     isValid <- validateReponse rsp
     if isValid == True
@@ -41,4 +42,6 @@ getLazyRequest urlString =
 
 constructURL :: PullNode -> Int -> String
 constructURL node seqNr =
-    "http://localhost/3.frame"
+    "http://"
+    ++ pnIp node ++ ":" ++ (show $ pnPort node)
+    ++ "/" ++ (show seqNr) ++ ".frame"

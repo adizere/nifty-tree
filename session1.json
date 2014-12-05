@@ -1,11 +1,11 @@
 {   "oiRevision": 1,
-    "oiSourceIp": "127.1.1.1",
-    "oiSourcePort": 9999,
+    "oiSourceIp": "127.0.0.1",
+    "oiSourcePort": 80,
     "oiNeighbors":[
-        {   "nbIp": "127.1.1.1",
-            "nbPort": 9999,
+        {   "nbIp": "127.0.0.1",
+            "nbPort": 80,
             "nbCycleNumber": 1,
-            "nbCycleDirection": 1
+            "nbCycleDirection": 2
         },
         {   "nbIp": "127.0.0.2",
             "nbPort": 2,

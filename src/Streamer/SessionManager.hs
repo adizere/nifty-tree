@@ -12,12 +12,12 @@ import System.IO ( Handle
                  , hGetLine
                  , hIsEOF
                  )
-import Control.Monad (forever)
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.BoundedChan
 import Control.Concurrent (forkIO)
 import Data.Maybe
 import qualified Data.ByteString.Lazy as L
+import qualified Data.List.Ordered    as R
 
 
 -- Path to the file holding the list of digests
@@ -37,7 +37,7 @@ digestsChanLength = 5
 
 data SessionManager = SessionManager
     { smPullNodes   :: PullNodesList
-    , smFrames      :: [Frame]
+    , smFrames      :: [Int]
     }  deriving (Eq)
 
 
@@ -53,28 +53,36 @@ startSessionManager sManager = do
     h    <- openFile digestsFilePath ReadMode
     chan <- newBoundedChan digestsChanLength
     _    <- forkIO (consumeDgstFile h chan 0)
-    forever $ do
-        digestLine <- readChan chan
-        let activeNode = pnlActiveNode $ smPullNodes sManager
-        putStrLn $ "Pulling a frame using meta " ++ (show digestLine)
-        mFrame <- pullFrame activeNode digestLine
-        putStrLn $ "Status : " ++ (show mFrame)
+    getFrames (pnlActiveNode $ smPullNodes sManager)
+              chan
+              (smFrames sManager)
 
 
-pullFrame :: PullNode -> String -> IO (Maybe Frame)
-pullFrame node digestLine = do
-        let maybeFmTuple = digestLineToFrameMetadata digestLine
-        if isJust maybeFmTuple
-            then do
-                let (seqNr, digest) = fromJust maybeFmTuple
-                bytes <- pullBytes node seqNr
-                if verifyDigest digest bytes == True
-                    then return $
-                            Just Frame { frSeqNr     = seqNr
-                                       , frDigest    = digest
-                                       , frContent   = bytes }
-                    else return Nothing
-            else return Nothing
+getFrames :: PullNode -> BoundedChan (String) -> [Int] -> IO ()
+getFrames activeNode chan sNrSoFar = do
+    (seqNr, digest) <- getDigestFileEntry chan sNrSoFar
+    putStrLn $ "These are the frames so far.. " ++ (show sNrSoFar)
+    putStrLn $ "Pulling a frame using meta " ++ (show seqNr) ++ " " ++ (digest)
+    mFrameSeqNr <- pullFrame activeNode (seqNr, digest)
+    case mFrameSeqNr of
+        Just sNr -> getFrames activeNode chan $ R.insertSet sNr sNrSoFar
+        Nothing  -> getFrames activeNode chan sNrSoFar
+
+
+-- | Pulls a frame from a given node and returns the sequence number for that
+-- frame. The frame is identified by a (sequence number, digest) tuple encoded
+-- in a String.
+pullFrame :: PullNode -> (Int, String) -> IO (Maybe Int)
+pullFrame node (seqNr, digest) = do
+    bytes <- pullBytes node seqNr
+    putStrLn $ "Verifying if the digest matches"
+    if verifyDigest digest bytes == True
+        then do
+            persistFrame seqNr bytes
+            return $ Just seqNr
+        else do
+            putStrLn "Invalid digest!"
+            return Nothing
 
 
 -- | Pulls a frame from a given node. Returns a Lazy Bytestring containing the
@@ -85,10 +93,20 @@ pullBytes :: PullNode -> Int -> IO (L.ByteString)
 pullBytes node seqNr = do
     result <- doRequest $ constructURL node seqNr
     case result of
-        Just bytes -> return bytes
-        otherwise -> do
-            putStrLn "Error executing request"
-            return L.empty
+        Just bytes  -> return bytes
+        Nothing     -> return L.empty
+
+
+getDigestFileEntry :: BoundedChan (String) -> [Int] -> IO (Int, String)
+getDigestFileEntry chan skipSeqNrList = do
+    digestLine <- readChan chan
+    let maybeFmTuple = digestLineToFrameMetadata digestLine
+    case maybeFmTuple of
+        Just (seqNr, digest) -> do
+            if R.member seqNr skipSeqNrList
+                then getDigestFileEntry chan skipSeqNrList
+                else return (seqNr, digest)
+        Nothing -> getDigestFileEntry chan skipSeqNrList
 
 
 -- | Consumes lines from a digest file and appends the lines to a BoundedChan.
