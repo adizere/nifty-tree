@@ -9,13 +9,6 @@ framesPersistPrefix :: String
 framesPersistPrefix = "/opt/streamer/"
 
 
-data Frame = Frame
-    { frSeqNr     :: Int
-    , frDigest    :: String
-    , frContent   :: L.ByteString
-    } deriving (Eq, Show)
-
-
 verifyDigest :: String -> L.ByteString -> Bool
 verifyDigest "" _           = False
 verifyDigest digest content
@@ -28,7 +21,7 @@ persistFrame seqNr content = do
     putStrLn $ "Persisting frame "
              ++ (show $ seqNr) ++ " in "
              ++ (getFramePersistPath $ seqNr)
-    -- L.writeFile (getFramePersistPath seqNr) content
+    L.writeFile (getFramePersistPath seqNr) content
 
 
 getFramePersistPath :: Int -> FilePath

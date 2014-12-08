@@ -37,14 +37,14 @@ digestsChanLength = 5
 
 data SessionManager = SessionManager
     { smPullNodes   :: PullNodesList
-    , smFrames      :: [Int]
+    , smFramesSeqNr :: [Int]
     }  deriving (Eq)
 
 
 -- SessionManager is an instance of Show typeclass, and we want a simplified
 -- string representation.
 instance Show SessionManager where
-    show sm = "{smFrames = " ++ (show $ smFrames sm) ++ " }"
+    show sm = "{smFramesSeqNr = " ++ (show $ smFramesSeqNr sm) ++ " }"
 
 
 -- | Main function executed by each SessionManager.
@@ -55,7 +55,7 @@ startSessionManager sManager = do
     _    <- forkIO (consumeDgstFile h chan 0)
     getFrames (pnlActiveNode $ smPullNodes sManager)
               chan
-              (smFrames sManager)
+              (smFramesSeqNr sManager)
 
 
 getFrames :: PullNode -> BoundedChan (String) -> [Int] -> IO ()

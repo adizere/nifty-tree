@@ -14,7 +14,6 @@ import Streamer.SessionManager
 import Data.Char
 import System.Directory
 import Control.Concurrent
-import Control.Monad (forever)
 import Control.Exception.Base (finally)
 
 
@@ -81,16 +80,15 @@ data Session = Session
 
 -- | The main function executed for every running Session.
 sessionMainLoop :: String -> IO ()
-sessionMainLoop sId = forever $ do
+sessionMainLoop sId = do
     threadDelay 1000000
     mSession <- assembleSession sId
     case mSession of
         Just ss     -> do
             putStrLn $ sId ++ " session: " ++ (show ss)
             startSessionManager $ ssManager ss
-        Nothing     -> do
-            putStrLn "err: Couldn't read the session file!"
-            return ()
+            sessionMainLoop sId
+        Nothing     -> putStrLn "err: Couldn't read the session file!"
 
 
 -- | Searches a given directory and returns all the ids of the found sessions.
@@ -135,7 +133,8 @@ assembleSession sId = do
     mPNodes <- maybeGetPullNodes sessionFileName
     case mPNodes of
         Just pNodes -> do
-                let mgr = SessionManager {smPullNodes = pNodes, smFrames = []}
+                let mgr = SessionManager {smPullNodes = pNodes
+                                         , smFramesSeqNr = []}
                 return $ Just Session { ssId = sId
                                       , ssPullNodes = pNodes
                                       , ssManager = mgr}
