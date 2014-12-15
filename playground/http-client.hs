@@ -1,11 +1,12 @@
 import Network.HTTP
 import Network.URI ( parseURI )
 import Network.Stream (Result)
+import Network.HTTP.Headers (HeaderName(HdrIfNoneMatch))
 import qualified Data.ByteString.Lazy as Lazy
 
 
 main = do
-    result <- doRequest "http://localhost/3.frame"
+    result <- doRequest "http://localhost/2.frame"
     case result of Just bytes -> putStrLn (show bytes)
                    otherwise -> putStrLn "Error executing request"
 
@@ -36,4 +37,7 @@ getLazyRequest
 getLazyRequest urlString =
   case parseURI urlString of
     Nothing -> error ("getLazyRequest: Not a valid URL - " ++ urlString)
-    Just u  -> mkRequest GET u
+    Just u  -> replaceHeader headerName headerValue $ mkRequest GET u
+    where
+        headerName = HdrIfNoneMatch
+        headerValue = "\"5485794c-3\""
