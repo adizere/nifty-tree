@@ -3,20 +3,34 @@
 module Streamer.Parents where
 
 
+import Streamer.HTTPClient
 import Streamer.Neighbors
-import Streamer.Util (getShuffledList)
+import Streamer.Util                (getShuffledList)
+
+import Control.Concurrent.MVar
+import Control.Concurrent           (threadDelay)
+import Control.Monad                (forever)
+import qualified Data.ByteString    as B
 
 
 data Parent = Parent
-    { pnIp      :: String
-    , pnPort    :: Int
-    } deriving (Eq, Show)
+    { pnIp              :: String
+    , pnPort            :: Int
+    , pnLatestCounter   :: MVar Int
+    , pnLatestETag      :: MVar B.ByteString
+    , pnIgnore          :: MVar Bool
+    } deriving (Eq)
 
 
 data ParentsSelection = ParentsSelection
-    { pnlBackupNodes    :: [Parent]
-    , pnlRevision       :: Int
+    { psList        :: [Parent]
+    , psRevision    :: Int
     } deriving (Eq, Show)
+
+
+instance Show Parent where
+    show Parent { pnIp = ip, pnPort = port } =
+        "Parent (" ++ ip ++ ":" ++ (show port) ++ ")"
 
 
 -- Parses the overlay info file and then selects from among the neighbors a set
@@ -29,13 +43,17 @@ maybeSelectParents sessionFileName = do
             -- get a shuffled list of numbers to be user at node selection
             randomInts <- getShuffledList . length $ oiNeighbors overlayInfo
             -- now assemble the list of Parents and return it
-            return . Just $ assembleParents overlayInfo randomInts
+            let (selNeighbors, rev) = assembleParents overlayInfo randomInts
+            bN <- mapM transformNeighborToParent selNeighbors
+            return . Just $ ParentsSelection {psList = bN, psRevision = rev}
         Nothing -> return Nothing
+    where
 
 
-assembleParents :: OverlayInfo -> [Int] -> ParentsSelection
+assembleParents :: OverlayInfo -> [Int] -> ([Neighbor], Int)
 assembleParents overlayInfo randomInts =
-    selectParents overlayInfo randomInts srcCyNum srcCyDir
+    ( selectParents overlayInfo randomInts srcCyNum srcCyDir
+    , oiRevision overlayInfo)
     where
         -- check if the source node is a neighbor & get its location
         (srcCyNum, srcCyDir)    = findNeighbor allNeighbors sIp sPort
@@ -44,39 +62,44 @@ assembleParents overlayInfo randomInts =
         sPort                   = oiSourcePort overlayInfo -- source Port number
 
 
-selectParents :: OverlayInfo -> [Int] -> Int -> Int -> ParentsSelection
+selectParents :: OverlayInfo -> [Int] -> Int -> Int -> [Neighbor]
 selectParents oi sList cNum cDir =
-    ParentsSelection {pnlBackupNodes = bN, pnlRevision = rev}
+    depSet ++ fastSet
     where
         allN = oiNeighbors oi
         (depSet, uSList) = selectDependableSet allN sList cycleNum cycleDir
         fastSet = selectFastPathSet allN uSList cycleNum cycleDir
-        bN = depSet ++ fastSet
-        rev = oiRevision oi
         cycleNum = if cNum == 0 then 1 else cNum
         cycleDir = if cDir == 0 then 1 else cDir
 
 
-transformNeighborToParent :: Neighbor -> Parent
-transformNeighborToParent Neighbor { nbIp = nIp, nbPort = nPort} =
-    Parent { pnIp = nIp, pnPort = nPort }
+transformNeighborToParent :: Neighbor -> IO (Parent)
+transformNeighborToParent Neighbor { nbIp = nIp, nbPort = nPort} = do
+    lc <- newMVar (0)       :: IO (MVar Int)
+    le <- newMVar (B.empty) :: IO (MVar B.ByteString)
+    ig <- newMVar (False)   :: IO (MVar Bool)
+    return Parent { pnIp               = nIp
+                  , pnPort             = nPort
+                  , pnLatestCounter    = lc
+                  , pnLatestETag       = le
+                  , pnIgnore           = ig }
 
 
-selectDependableSet :: [Neighbor] -> [Int] -> Int -> Int -> ([Parent], [Int])
+selectDependableSet :: [Neighbor] -> [Int] -> Int -> Int -> ([Neighbor], [Int])
 selectDependableSet aN sList cNum cDir =
-    (ds, uSList)
+    (selectedNodes, uSList)
     where
         (nCount, allFromCluster) = getAllNeighborsFromCluster aN cNum cDir
         majCount = nCount `div` 2 + 1
         (positions, uSList) = splitAt majCount sList
         nodePositions = map (\p -> p `mod` nCount) positions
         selectedNodes = map (\pos -> allFromCluster!!pos) nodePositions
-        ds = map transformNeighborToParent selectedNodes
+        -- ds = map transformNeighborToParent selectedNodes
 
 
-selectFastPathSet :: [Neighbor] -> [Int] -> Int -> Int -> [Parent]
+selectFastPathSet :: [Neighbor] -> [Int] -> Int -> Int -> [Neighbor]
 selectFastPathSet aN sList ignoreNum ignoreDir =
-    map transformNeighborToParent selectedNodes
+    selectedNodes
     where
         clusters = filter
                     ((ignoreNum, ignoreDir) /=)
@@ -115,8 +138,29 @@ getAllNeighborsFromCluster allNeighbors cycleNum cycleDir =
 findNeighbor :: [Neighbor] -> String -> Int -> (Int, Int)
 findNeighbor [] _ _ = (0, 0)
 findNeighbor (n:ns) sIp sPort
-        | nbIp n == sIp && nbPort n == sPort = (cyNum, cyDir)
-        | otherwise = findNeighbor ns sIp sPort
-        where
-            cyNum = nbCycleNumber n
-            cyDir = nbCycleDirection n
+    | nbIp n == sIp && nbPort n == sPort = (cyNum, cyDir)
+    | otherwise = findNeighbor ns sIp sPort
+    where
+        cyNum = nbCycleNumber n
+        cyDir = nbCycleDirection n
+
+
+checkParents :: ParentsSelection -> IO ()
+checkParents pSelection = forever $ do
+    mapM_ checkOneParent $ psList pSelection
+    threadDelay 1000000
+    return ()
+
+
+checkOneParent :: Parent -> IO ()
+checkOneParent cp = do
+    putStrLn $ "Checking parent " ++ show cp
+    cEtag <- readMVar (pnLatestETag cp)
+    mCntr <- httpGetCounter (constructCounterURL (pnIp cp) (pnPort cp)) cEtag
+    putStrLn $ show mCntr
+    case mCntr of
+        Just (counter, etag) ->
+            (swapMVar (pnLatestCounter cp) counter)
+            >>= (\v -> putStrLn $ "Previous val was: " ++ (show v))
+            >> (swapMVar (pnLatestETag cp) etag) >> return ()
+        Nothing -> return ()

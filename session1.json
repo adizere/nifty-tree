@@ -6,41 +6,6 @@
             "nbPort": 80,
             "nbCycleNumber": 1,
             "nbCycleDirection": 2
-        },
-        {   "nbIp": "127.0.0.2",
-            "nbPort": 2,
-            "nbCycleNumber": 1,
-            "nbCycleDirection": 1
-        },
-        {   "nbIp": "127.0.0.3",
-            "nbPort": 3,
-            "nbCycleNumber": 1,
-            "nbCycleDirection": 1
-        },
-        {   "nbIp": "127.0.0.4",
-            "nbPort": 4,
-            "nbCycleNumber": 1,
-            "nbCycleDirection": 1
-        },
-        {   "nbIp": "127.0.0.5",
-            "nbPort": 5,
-            "nbCycleNumber": 1,
-            "nbCycleDirection": 1
-        },
-        {   "nbIp": "127.0.0.6",
-            "nbPort": 6,
-            "nbCycleNumber": 1,
-            "nbCycleDirection": 1
-        },
-        {   "nbIp": "192.168.112.113",
-            "nbPort": 6,
-            "nbCycleNumber": 2,
-            "nbCycleDirection": 1
-        },
-        {   "nbIp": "192.168.0.1",
-            "nbPort": 6,
-            "nbCycleNumber": 2,
-            "nbCycleDirection": 2
         }
     ]
 }

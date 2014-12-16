@@ -46,7 +46,7 @@ instance Show SessionHandle where
 -- When the thread finishes, it will fill the shMVar, signaling that it is done.
 startSession :: String -> IO SessionHandle
 startSession sId = do
-    m <- newEmptyMVar
+    m <- newEmptyMVar :: IO (MVar Int)
     tId <- forkIO (finally (runSession sId) (putMVar m 1))
     return SessionHandle { shSessionId  = sId
                          , shThreadId   = tId
@@ -82,7 +82,7 @@ runSession sId = do
         Just sm     -> do
             putStrLn $ sId ++ " session: " ++ (show sm)
             startSessionManager sm
-            runSession sId
+            -- runSession sId
         Nothing     -> putStrLn "err: Couldn't read the session file!"
 
 

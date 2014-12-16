@@ -4,7 +4,7 @@ module Streamer.SessionManager where
 import Streamer.Frame
 import Streamer.Parents
 import Streamer.Util        (maybeRead)
-import Streamer.HTTPClient  (doRequest, constructURL)
+import Streamer.HTTPClient  (httpGetFrameBytes, constructFrameURL)
 
 import System.IO ( Handle
                  , IOMode(ReadMode)
@@ -12,12 +12,12 @@ import System.IO ( Handle
                  , hGetLine
                  , hIsEOF
                  )
-import Control.Concurrent (threadDelay)
 import Control.Concurrent.BoundedChan
-import Control.Concurrent (forkIO)
+import Control.Concurrent               (threadDelay)
+import Control.Concurrent               (forkIO)
 import Data.Maybe
-import qualified Data.ByteString.Lazy as L
-import qualified Data.List.Ordered    as R
+import qualified Data.ByteString.Lazy   as L
+import qualified Data.List.Ordered      as R
 
 
 -- Path to the file holding the list of digests
@@ -53,9 +53,11 @@ startSessionManager sManager = do
     h    <- openFile digestsFilePath ReadMode
     chan <- newBoundedChan digestsChanLength
     _    <- forkIO (consumeDgstFile h chan 0)
-    getFrames (head $ pnlBackupNodes $ smParents sManager)
-              chan
-              (smFramesSeqNr sManager)
+    _    <- forkIO (checkParents $ smParents sManager)
+    -- getFrames (head $ psList $ smParents sManager)
+    --           chan
+    --           (smFramesSeqNr sManager)
+    return ()
 
 
 getFrames :: Parent -> BoundedChan (String) -> [Int] -> IO ()
@@ -85,13 +87,13 @@ pullFrame node (seqNr, digest) = do
             return Nothing
 
 
--- | Pulls a frame from a given node. Returns a Lazy Bytestring containing the
--- data that was pulled. In case of error, the Bytestring is empty.
--- Various reasons can cause errors: the node contains corrupted frames, it has
--- no frames at all, has no running http server, etc.
+-- | Pulls a frame from a given parent. Returns a Lazy Bytestring containing the
+-- data that was pulled. In case of error, the Bytestring is empty. Various
+-- reasons can cause errors: the parent contains corrupted frames, it has no
+-- frames at all, has no running http server, etc.
 pullBytes :: Parent -> Int -> IO (L.ByteString)
-pullBytes node seqNr = do
-    result <- doRequest $ constructURL node seqNr
+pullBytes p seqNr = do
+    result <- httpGetFrameBytes $ constructFrameURL (pnIp p) (pnPort p) seqNr
     case result of
         Just bytes  -> return bytes
         Nothing     -> return L.empty
