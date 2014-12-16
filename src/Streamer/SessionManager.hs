@@ -54,21 +54,22 @@ startSessionManager sManager = do
     chan <- newBoundedChan digestsChanLength
     _    <- forkIO (consumeDgstFile h chan 0)
     _    <- forkIO (checkParents $ smParents sManager)
-    -- getFrames (head $ psList $ smParents sManager)
-    --           chan
-    --           (smFramesSeqNr sManager)
+    getFrames (psList $ smParents sManager)
+              chan
+              (smFramesSeqNr sManager)
     return ()
 
 
-getFrames :: Parent -> BoundedChan (String) -> [Int] -> IO ()
-getFrames activeNode chan sNrSoFar = do
+getFrames :: [Parent] -> BoundedChan (String) -> [Int] -> IO ()
+getFrames parents chan sNrSoFar = do
+    let activeNode = head parents
     (seqNr, digest) <- getDigestFileEntry chan sNrSoFar
     putStrLn $ "These are the frames so far.. " ++ (show sNrSoFar)
     putStrLn $ "Pulling a frame using meta " ++ (show seqNr) ++ " " ++ (digest)
     mFrameSeqNr <- pullFrame activeNode (seqNr, digest)
     case mFrameSeqNr of
-        Just sNr -> getFrames activeNode chan $ R.insertSet sNr sNrSoFar
-        Nothing  -> getFrames activeNode chan sNrSoFar
+        Just sNr -> getFrames parents chan $ R.insertSet sNr sNrSoFar
+        Nothing  -> getFrames parents chan sNrSoFar
 
 
 -- | Pulls a frame from a given node and returns the sequence number for that
@@ -93,7 +94,7 @@ pullFrame node (seqNr, digest) = do
 -- frames at all, has no running http server, etc.
 pullBytes :: Parent -> Int -> IO (L.ByteString)
 pullBytes p seqNr = do
-    result <- httpGetFrameBytes $ constructFrameURL (pnIp p) (pnPort p) seqNr
+    result <- httpGetFrameBytes $ constructFrameURL (pIp p) (pPort p) seqNr
     case result of
         Just bytes  -> return bytes
         Nothing     -> return L.empty

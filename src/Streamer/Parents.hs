@@ -1,5 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
-
 module Streamer.Parents where
 
 
@@ -14,11 +12,11 @@ import qualified Data.ByteString    as B
 
 
 data Parent = Parent
-    { pnIp              :: String
-    , pnPort            :: Int
-    , pnLatestCounter   :: MVar Int
-    , pnLatestETag      :: MVar B.ByteString
-    , pnIgnore          :: MVar Bool
+    { pIp              :: String
+    , pPort            :: Int
+    , pLatestCounter   :: MVar Int
+    , pLatestETag      :: MVar B.ByteString
+    , pIgnore          :: MVar Bool
     } deriving (Eq)
 
 
@@ -29,7 +27,7 @@ data ParentsSelection = ParentsSelection
 
 
 instance Show Parent where
-    show Parent { pnIp = ip, pnPort = port } =
+    show Parent { pIp = ip, pPort = port } =
         "Parent (" ++ ip ++ ":" ++ (show port) ++ ")"
 
 
@@ -78,11 +76,11 @@ transformNeighborToParent Neighbor { nbIp = nIp, nbPort = nPort} = do
     lc <- newMVar (0)       :: IO (MVar Int)
     le <- newMVar (B.empty) :: IO (MVar B.ByteString)
     ig <- newMVar (False)   :: IO (MVar Bool)
-    return Parent { pnIp               = nIp
-                  , pnPort             = nPort
-                  , pnLatestCounter    = lc
-                  , pnLatestETag       = le
-                  , pnIgnore           = ig }
+    return Parent { pIp               = nIp
+                  , pPort             = nPort
+                  , pLatestCounter    = lc
+                  , pLatestETag       = le
+                  , pIgnore           = ig }
 
 
 selectDependableSet :: [Neighbor] -> [Int] -> Int -> Int -> ([Neighbor], [Int])
@@ -155,12 +153,12 @@ checkParents pSelection = forever $ do
 checkOneParent :: Parent -> IO ()
 checkOneParent cp = do
     putStrLn $ "Checking parent " ++ show cp
-    cEtag <- readMVar (pnLatestETag cp)
-    mCntr <- httpGetCounter (constructCounterURL (pnIp cp) (pnPort cp)) cEtag
+    cEtag <- readMVar (pLatestETag cp)
+    mCntr <- httpGetCounter (constructCounterURL (pIp cp) (pPort cp)) cEtag
     putStrLn $ show mCntr
     case mCntr of
         Just (counter, etag) ->
-            (swapMVar (pnLatestCounter cp) counter)
+            (swapMVar (pLatestCounter cp) counter)
             >>= (\v -> putStrLn $ "Previous val was: " ++ (show v))
-            >> (swapMVar (pnLatestETag cp) etag) >> return ()
+            >> (swapMVar (pLatestETag cp) etag) >> return ()
         Nothing -> return ()
