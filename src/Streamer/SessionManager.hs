@@ -2,7 +2,7 @@ module Streamer.SessionManager where
 
 
 import Streamer.Frame
-import Streamer.PullNodes
+import Streamer.Parents
 import Streamer.Util        (maybeRead)
 import Streamer.HTTPClient  (doRequest, constructURL)
 
@@ -36,7 +36,7 @@ digestsChanLength = 5
 
 
 data SessionManager = SessionManager
-    { smPullNodes   :: PullNodesList
+    { smParents   :: ParentsSelection
     , smFramesSeqNr :: [Int]
     }  deriving (Eq)
 
@@ -53,12 +53,12 @@ startSessionManager sManager = do
     h    <- openFile digestsFilePath ReadMode
     chan <- newBoundedChan digestsChanLength
     _    <- forkIO (consumeDgstFile h chan 0)
-    getFrames (pnlActiveNode $ smPullNodes sManager)
+    getFrames (head $ pnlBackupNodes $ smParents sManager)
               chan
               (smFramesSeqNr sManager)
 
 
-getFrames :: PullNode -> BoundedChan (String) -> [Int] -> IO ()
+getFrames :: Parent -> BoundedChan (String) -> [Int] -> IO ()
 getFrames activeNode chan sNrSoFar = do
     (seqNr, digest) <- getDigestFileEntry chan sNrSoFar
     putStrLn $ "These are the frames so far.. " ++ (show sNrSoFar)
@@ -72,7 +72,7 @@ getFrames activeNode chan sNrSoFar = do
 -- | Pulls a frame from a given node and returns the sequence number for that
 -- frame. The frame is identified by a (sequence number, digest) tuple encoded
 -- in a String.
-pullFrame :: PullNode -> (Int, String) -> IO (Maybe Int)
+pullFrame :: Parent -> (Int, String) -> IO (Maybe Int)
 pullFrame node (seqNr, digest) = do
     bytes <- pullBytes node seqNr
     putStrLn $ "Verifying if the digest matches"
@@ -89,7 +89,7 @@ pullFrame node (seqNr, digest) = do
 -- data that was pulled. In case of error, the Bytestring is empty.
 -- Various reasons can cause errors: the node contains corrupted frames, it has
 -- no frames at all, has no running http server, etc.
-pullBytes :: PullNode -> Int -> IO (L.ByteString)
+pullBytes :: Parent -> Int -> IO (L.ByteString)
 pullBytes node seqNr = do
     result <- doRequest $ constructURL node seqNr
     case result of

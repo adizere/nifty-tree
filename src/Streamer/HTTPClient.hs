@@ -1,7 +1,7 @@
 module Streamer.HTTPClient where
 
 
-import Streamer.PullNodes
+import Streamer.Parents
 
 import Network.HTTP
 import Network.URI ( parseURI )
@@ -40,7 +40,7 @@ getLazyRequest urlString =
 
 
 
-constructURL :: PullNode -> Int -> String
+constructURL :: Parent -> Int -> String
 constructURL node seqNr =
     "http://"
     ++ pnIp node ++ ":" ++ (show $ pnPort node)

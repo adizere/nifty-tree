@@ -8,7 +8,7 @@ module Streamer.Session
 ) where
 
 
-import Streamer.PullNodes
+import Streamer.Parents
 import Streamer.SessionManager
 
 import Data.Char
@@ -28,9 +28,10 @@ sessionDirectory = "."
 
 -- each SessionHandle describes a running session
 data SessionHandle = SessionHandle
-    { shSessionId   :: String -- the same significance as Session.ssId
-    , shThreadId    :: ThreadId
-    , shMVar        :: MVar (Int)
+    { shSessionId   :: String       -- Session ID running with this handle;
+    , shThreadId    :: ThreadId     -- Thread which contains this session;
+    , shMVar        :: MVar (Int)   -- shMVar: If empty, the session is running,
+                                    -- otherwise, the session finished;
     } deriving (Eq)
 
 
@@ -42,10 +43,11 @@ instance Show SessionHandle where
 
 -- | Sparks a new thread, which will handle exclusively a given session.
 -- Expects as parameter the id of a session.
+-- When the thread finishes, it will fill the shMVar, signaling that it is done.
 startSession :: String -> IO SessionHandle
 startSession sId = do
     m <- newEmptyMVar
-    tId <- forkIO (finally (sessionMainLoop sId) (putMVar m 1))
+    tId <- forkIO (finally (runSession sId) (putMVar m 1))
     return SessionHandle { shSessionId  = sId
                          , shThreadId   = tId
                          , shMVar       = m }
@@ -67,27 +69,20 @@ getSessionIdsFromSessionHandles iSessions =
 
 
 --------------------------------------------------------------------------------
---- private functions and data types
+--- Private functions
 ---
 
 
-data Session = Session
-    { ssId          :: String
-    , ssPullNodes   :: PullNodesList
-    , ssManager     :: SessionManager
-    } deriving (Eq, Show)
-
-
 -- | The main function executed for every running Session.
-sessionMainLoop :: String -> IO ()
-sessionMainLoop sId = do
+runSession :: String -> IO ()
+runSession sId = do
     threadDelay 1000000
-    mSession <- assembleSession sId
-    case mSession of
-        Just ss     -> do
-            putStrLn $ sId ++ " session: " ++ (show ss)
-            startSessionManager $ ssManager ss
-            sessionMainLoop sId
+    mSManager <- getSessionManager sId
+    case mSManager of
+        Just sm     -> do
+            putStrLn $ sId ++ " session: " ++ (show sm)
+            startSessionManager sm
+            runSession sId
         Nothing     -> putStrLn "err: Couldn't read the session file!"
 
 
@@ -126,18 +121,12 @@ assembleSessionFilePath sId =
 
 -- | Constructs a Session object for a given session id.
 -- This function
-assembleSession :: String -> IO (Maybe Session)
-assembleSession sId = do
+getSessionManager :: String -> IO (Maybe SessionManager)
+getSessionManager sId = do
     let sessionFileName = assembleSessionFilePath sId
     putStrLn $ "Reading session from file " ++ sessionFileName
-    mPNodes <- maybeGetPullNodes sessionFileName
+    mPNodes <- maybeSelectParents sessionFileName
     case mPNodes of
-        Just pNodes -> do
-                let mgr = SessionManager {smPullNodes = pNodes
-                                         , smFramesSeqNr = []}
-                return $ Just Session { ssId = sId
-                                      , ssPullNodes = pNodes
-                                      , ssManager = mgr}
-        Nothing ->
-                return Nothing
-
+        Just pNodes -> return $ Just $ SessionManager { smParents = pNodes
+                                                      , smFramesSeqNr = []}
+        Nothing     -> return Nothing
