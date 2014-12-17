@@ -58,7 +58,7 @@ constructCounterURL pIp pPort =
 
 httpGetCounter :: String -> B.ByteString -> IO (Maybe (Int, B.ByteString))
 httpGetCounter url etag = do
-    putStrLn $ "Getting the counter with URL: " ++ url
+    putStrLn $ "[pchecker] Getting the counter with URL: " ++ url
                 ++ " and etag: " ++ (C.unpack etag)
     maybeResp <- H.simpleHTTP req
     case maybeResp of

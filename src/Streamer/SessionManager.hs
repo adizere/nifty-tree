@@ -44,7 +44,7 @@ data SessionManager = SessionManager
 -- SessionManager is an instance of Show typeclass, and we want a simplified
 -- string representation.
 instance Show SessionManager where
-    show sm = "{smFramesSeqNr = " ++ (show $ smFramesSeqNr sm) ++ " }"
+    show sm = "{smFramesSeqNr = " ++ (show $ smFramesSeqNr sm) ++ "}"
 
 
 -- | Main function executed by each SessionManager.
@@ -72,12 +72,11 @@ getFrames parents chan sNrSoFar = do
         Nothing  -> getFrames parents chan sNrSoFar
 
 
--- | Pulls a frame from a given node and returns the sequence number for that
--- frame. The frame is identified by a (sequence number, digest) tuple encoded
--- in a String.
+-- | Pulls a frame from a given prnt and returns the sequence number for that
+-- frame. The frame is identified by a (sequence number, digest) tuple.
 pullFrame :: Parent -> (Int, String) -> IO (Maybe Int)
-pullFrame node (seqNr, digest) = do
-    bytes <- pullBytes node seqNr
+pullFrame prnt (seqNr, digest) = do
+    bytes <- pullBytes prnt seqNr
     putStrLn $ "Verifying if the digest matches"
     if verifyDigest digest bytes == True
         then do

@@ -11,6 +11,11 @@ import Control.Monad                (forever)
 import qualified Data.ByteString    as B
 
 
+-- | How many microseconds to pause between subsequent parents checks.
+checkParentsDelay :: Int
+checkParentsDelay = 1000000     -- 1.000.000 us = 1 second
+
+
 data Parent = Parent
     { pIp              :: String
     , pPort            :: Int
@@ -92,7 +97,6 @@ selectDependableSet aN sList cNum cDir =
         (positions, uSList) = splitAt majCount sList
         nodePositions = map (\p -> p `mod` nCount) positions
         selectedNodes = map (\pos -> allFromCluster!!pos) nodePositions
-        -- ds = map transformNeighborToParent selectedNodes
 
 
 selectFastPathSet :: [Neighbor] -> [Int] -> Int -> Int -> [Neighbor]
@@ -146,19 +150,18 @@ findNeighbor (n:ns) sIp sPort
 checkParents :: ParentsSelection -> IO ()
 checkParents pSelection = forever $ do
     mapM_ checkOneParent $ psList pSelection
-    threadDelay 1000000
+    threadDelay checkParentsDelay
     return ()
 
 
 checkOneParent :: Parent -> IO ()
 checkOneParent cp = do
-    putStrLn $ "Checking parent " ++ show cp
+    putStrLn $ "[pchecker] Checking parent " ++ show cp
     cEtag <- readMVar (pLatestETag cp)
     mCntr <- httpGetCounter (constructCounterURL (pIp cp) (pPort cp)) cEtag
-    putStrLn $ show mCntr
     case mCntr of
         Just (counter, etag) ->
             (swapMVar (pLatestCounter cp) counter)
-            >>= (\v -> putStrLn $ "Previous val was: " ++ (show v))
+            >>= (\v -> putStrLn $ "[pchecker] Previous val was: " ++ (show v))
             >> (swapMVar (pLatestETag cp) etag) >> return ()
         Nothing -> return ()
