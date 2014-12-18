@@ -1,4 +1,4 @@
-module Streamer.Frame where
+module Streamer.Frames where
 
 
 import qualified Codec.Digest.SHA       as S
