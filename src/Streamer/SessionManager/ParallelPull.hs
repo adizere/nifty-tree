@@ -6,17 +6,16 @@ module Streamer.SessionManager.ParallelPull
 import Streamer.Parents
 import Streamer.Frames
 import Streamer.HTTPClient  ( httpGetFrameBytes, constructFrameURL )
-import Streamer.Util        ( maybeRead )
+import Streamer.SessionManager.DigestsFile ( getDigestFileEntry )
 
-import Data.Maybe
 import Control.Concurrent.MVar
-import Data.Ord
 import Control.Concurrent                       ( threadDelay, forkIO )
 import Control.Monad                            ( forever )
+import Control.Monad.STM                        ( atomically )
 import qualified Data.ByteString.Lazy           as L
 import qualified Data.List.Ordered              as R
-import qualified Data.Sequence                  as S
 import qualified Control.Concurrent.Chan        as C
+import qualified Control.Concurrent.STM.TChan   as STC
 import qualified Control.Concurrent.BoundedChan as BCH
 
 
@@ -28,10 +27,6 @@ import qualified Control.Concurrent.BoundedChan as BCH
 parallelism :: Int
 parallelism = 3
 
-
--- | Specifies how many frames to pull sequentially from a parent.
-parentLoad :: Int
-parentLoad = 3
 
 -- | Length of the channel that we use to transmit failed tasks.
 failedTasksChanLength :: Int
@@ -47,11 +42,11 @@ failedTasksFetchLimit = 5
 -- Data Types
 
 data PullTask = PullTask
-    { tParentIp     :: String
-    , tParentPort   :: Int
-    , tFrameSeqNr   :: Int
-    , tFrameDigest  :: String
-    , tStatus       :: Maybe Bool    -- consider removing this record field
+    { ptParentIp     :: String
+    , ptParentPort   :: Int
+    , ptFrameSeqNr   :: Int
+    , ptFrameDigest  :: String
+    , ptStatus       :: Maybe Bool    -- consider removing this record field
     } deriving (Eq, Show)
 
 
@@ -61,8 +56,11 @@ data PullTask = PullTask
 --------------------------------------------------------------------------------
 -- | Handles pulling of frames in parallel, using multiple threads.
 -- Each thread is assigned a parent, and from each parent we try to pull several
--- frames sequentially.
-startParallelPull :: [Parent] -> BCH.BoundedChan (String) -> [Int] -> IO ()
+-- frames (i.e., PullTask) sequentially.
+startParallelPull :: [Parent]                       -- list of all parents
+                     -> BCH.BoundedChan (String)    -- digests channel
+                     -> [Int]                       -- frames consumed so far
+                     -> IO ()
 startParallelPull parents digestsChan sNrSoFar = do
     (inChans, outChans) <- sparkPullThreads parallelism
     failedTasksChan     <- BCH.newBoundedChan failedTasksChanLength
@@ -77,20 +75,52 @@ assignPullTasks ::
     [Parent]                        -- parent to which we can assign tasks
     -> BCH.BoundedChan (String)     -- digests for tasks come through here
     -> BCH.BoundedChan (PullTask)   -- failed tasks come through here
-    -> [C.Chan (PullTask)]          -- input to pull threads
+    -> [C.Chan (PullTask)]          -- pull threads input channel
     -> IO ()
 assignPullTasks parents digChan fTChan pTIChan =
     forever $ do
+        -- Get the failed tasks.
         fTasks <- fetchFailedTasks fTChan failedTasksFetchLimit []
-        ignoreParents parents $ map (\t -> (tParentIp t, tParentPort t)) fTasks
-        -- Naive: assign to each parent as much as it can take..
-        -- TODO!
-        return ()
+        -- Ignore the parents corresponding to failed tasks.
+        ignoreParents parents $ map (\t -> (ptParentIp t, ptParentPort t)) fTasks
+        -- Fetch any new frame (tuple) from the digest file.
+        let failedTuples = getTupples fTasks
+        t <- getDigestFileEntry digChan []
+        -- Obtains the top K parents sorted descending by their counters.
+        tParents <- getTopKParents parents parallelism []
+        case t of
+            Just tuple  -> assignTuples (tuple:failedTuples) tParents pTIChan 0
+            Nothing     -> assignTuples failedTuples tParents pTIChan 0
+        threadDelay 100000
         where
-            -- Obtains the top K parents sorted descending by their counters
-            tParents = getTopKParents parents parallelism
-            -- Transforms failed Tasks into tuples of (SeqNr, Digest)
-            fFrames fT = map (\t -> (tFrameSeqNr t, tFrameDigest t)) fT
+            -- Transforms failed PullTask into tuples of (SeqNr, Digest).
+            getTupples ftu = map (\t -> (ptFrameSeqNr t, ptFrameDigest t)) ftu
+
+
+assignTuples ::
+    [(Int, String)]         -- tuples that will be assigned
+    -> [(String, Int, Int)] -- parents
+    -> [C.Chan (PullTask)]  -- pull threads input channel
+    -> Int                  -- counter to help distribute the tuples evenly
+    -> IO ()
+assignTuples [] _ _ _ = do
+    putStrLn "Finished assigning tuples."
+assignTuples _ [] _ _ = do
+    putStrLn "No parents available for assignTuples!"
+assignTuples _ _ [] _ = do
+    putStrLn "No thread channels available for assignTuples!"
+assignTuples ((tSeq, tDig):xt) parents channels cnt = do
+        C.writeChan chan $ PullTask { ptParentIp = parIp
+                                    , ptParentPort = parPort
+                                    , ptFrameSeqNr = tSeq
+                                    , ptFrameDigest = tDig
+                                    , ptStatus = Nothing}
+        assignTuples xt parents channels $ cnt+1
+    where
+        idxParents = (length parents) `rem` cnt
+        idxChannels = (length channels) `rem` cnt
+        (parIp, parPort, _) = parents!!idxParents
+        chan = channels!!idxChannels
 
 
 --------------------------------------------------------------------------------
@@ -99,10 +129,21 @@ assignPullTasks parents digChan fTChan pTIChan =
 -- These tasks are later consumed by assignPullTasks.
 collectPullTasks ::
     BCH.BoundedChan (PullTask)      -- failed tasks
-    -> [C.Chan (PullTask)]          -- output of pull threads
+    -> [STC.TChan (PullTask)]       -- output of pull threads
     -> IO ()
-collectPullTasks failedTasksChan pullThreadsOChan = do
-    return ()
+collectPullTasks failedTasksChan pullThreadsOChan =
+    forever $ do
+        mapM_ (extractTask failedTasksChan) pullThreadsOChan
+        threadDelay 100000
+    where
+        extractTask fChan oChan = do
+            empt <- atomically $ STC.isEmptyTChan oChan
+            if empt
+                then return ()
+                else do
+                    a <- atomically $ STC.readTChan oChan
+                    BCH.writeChan fChan a
+                    return ()
 
 
 --------------------------------------------------------------------------------
@@ -125,9 +166,9 @@ getTopKParents (p:xp) k accum = do
             tup <- parentToTuple p
             getTopKParents xp k $ R.insertSetBy compareByCounter tup accum
     where
-        parentToTuple p = do
-            cnt <- readMVar $ pLatestCounter p
-            return (pIp p, pPort p, cnt)
+        parentToTuple pa = do
+            cnt <- readMVar $ pLatestCounter pa
+            return (pIp pa, pPort pa, cnt)
         -- The accumulator list is ordered by the counter value.
         compareByCounter (_, _, cnt1) (_, _, cnt2) =
             compare cnt1 cnt2
@@ -138,10 +179,12 @@ getTopKParents (p:xp) k accum = do
 -- The threads receive PullTasks from their input channel, execute these tasks
 -- by pulling the associated frame from the given parent, and return a status
 -- in the output channel.
--- The status of an executed PullTask is marked in tStatus record, either True
+-- The status of an executed PullTask is marked in ptStatus record, either True
 -- if success, or False if failure.
 -- The parameter k represents the degree of parallelism.
-sparkPullThreads :: Int -> IO ([C.Chan (PullTask)], [C.Chan (PullTask)])
+sparkPullThreads ::
+    Int
+    -> IO ([C.Chan (PullTask)], [STC.TChan (PullTask)])
 sparkPullThreads para = do
     if para < 1
         then return ([],[])
@@ -152,7 +195,7 @@ sparkPullThreads para = do
             -- This returns a tuple with the input and output channels.
             sparkPullThread _ = do
                 inChan <- C.newChan :: IO (C.Chan PullTask)
-                outChan <- C.newChan :: IO (C.Chan PullTask)
+                outChan <- STC.newTChanIO :: IO (STC.TChan PullTask)
                 _ <- forkIO (pullThreadFunc inChan outChan)
                 return (inChan, outChan)
             foldChans (inCs, outCs) (ic, oc) =
@@ -161,18 +204,23 @@ sparkPullThreads para = do
 
 --------------------------------------------------------------------------------
 -- | Main function executed by every thread that pulls frames.
-pullThreadFunc :: C.Chan PullTask -> C.Chan PullTask -> IO ()
+pullThreadFunc ::
+    C.Chan PullTask     -- input channel
+    -> STC.TChan PullTask  -- output channel
+    -> IO ()
 pullThreadFunc iC oC = forever $ do
     C.readChan iC
     >>= (\task -> executePullTask task
     >>= (\mSeqNr -> case mSeqNr of
                         Just seqNr -> putStrLn $ "Finished.." ++ (show seqNr)
-                        Nothing    -> C.writeChan oC (fdTask task) >> return ()
+                        Nothing    ->
+                            atomically $ STC.writeTChan oC (fdTask task)
+                            >> return ()
         ))
     where
-        -- Transforms a Task into a failed Task, i.e., updates the tStatus
+        -- Transforms a Task into a failed Task, i.e., updates the ptStatus
         -- record field to False.
-        fdTask task = task { tStatus = Just False }
+        fdTask task = task { ptStatus = Just False }
 
 
 --------------------------------------------------------------------------------
@@ -180,9 +228,9 @@ pullThreadFunc iC oC = forever $ do
 -- frame. The frame is identified by a (sequence number, digest) tuple.
 executePullTask :: PullTask -> IO (Maybe Int)
 executePullTask task = do
-    bytes <- pullBytes (tParentIp task) (tParentPort task) seqNr
+    bytes <- pullBytes (ptParentIp task) (ptParentPort task) seqNr
     putStrLn $ "Verifying if the digest matches"
-    if verifyDigest (tFrameDigest task) bytes == True
+    if verifyDigest (ptFrameDigest task) bytes == True
         then do
             persistFrame seqNr bytes
             return $ Just seqNr
@@ -190,7 +238,7 @@ executePullTask task = do
             putStrLn "Invalid digest!"
             return Nothing
     where
-        seqNr = tFrameSeqNr task
+        seqNr = ptFrameSeqNr task
 
 
 --------------------------------------------------------------------------------
@@ -204,52 +252,6 @@ pullBytes ip port seqNr = do
     case result of
         Just bytes  -> return bytes
         Nothing     -> return L.empty
-
-
---------------------------------------------------------------------------------
--- | Reads the next entry from the digest file. An entry has the form of a tuple
--- (sequence number, digest).
--- The digest file is represented as a fifo queue (Bounded Chan).
--- The second parameter is a list of Int representing sequence numbers that this
--- function shall skip (if encountered in the fifo queue).
--- This function block if there is no entry available.
-getDigestFileEntry ::
-    BCH.BoundedChan (String)
-    -> [Int]
-    -> IO (Maybe (Int, String))
-getDigestFileEntry chan skipSeqNrList = do
-    mLine <- BCH.tryReadChan chan
-    case mLine of
-        Just digestLine -> do
-            let maybeFmTuple = digestLineToFrameMetadata digestLine
-            case maybeFmTuple of
-                Just (seqNr, digest) -> do
-                    if R.member seqNr skipSeqNrList
-                        then getDigestFileEntry chan skipSeqNrList
-                        else return $ Just (seqNr, digest)
-                Nothing -> getDigestFileEntry chan skipSeqNrList
-        Nothing -> return Nothing
-
-
---------------------------------------------------------------------------------
--- | Takes a line from the digests file and parses it, yielding a sequence
--- number and the associated digest.
---
--- For example,
--- >    digestLineToFrameMetadata
---          "2 076a27c79e5ace2a3d47f9dd2e83e4ff6ea8872b3c2218f66c92b89b55f36560"
--- will output the following tuple:
--- > ("2", "076a27c79e5ace2a3d47f9dd2e83e4ff6ea8872b3c2218f66c92b89b55f36560")
-digestLineToFrameMetadata :: String -> Maybe (Int, String)
-digestLineToFrameMetadata "" = Nothing
-digestLineToFrameMetadata line
-    | (length items == 2) && (isJust seqNr) && (length digest == 64) =
-        Just (fromJust seqNr, digest)
-    | otherwise = Nothing
-    where
-        items = words line
-        seqNr = maybeRead $ items!!0 :: Maybe Int
-        digest = items!!1
 
 
 --------------------------------------------------------------------------------
