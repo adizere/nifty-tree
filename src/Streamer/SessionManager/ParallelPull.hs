@@ -57,10 +57,11 @@ data PullTask = PullTask
 -- | Handles pulling of frames in parallel, using multiple threads.
 -- Each thread is assigned a parent, and from each parent we try to pull several
 -- frames (i.e., PullTask) sequentially.
-startParallelPull :: [Parent]                       -- list of all parents
-                     -> BCH.BoundedChan (String)    -- digests channel
-                     -> [Int]                       -- frames consumed so far
-                     -> IO ()
+startParallelPull ::
+    [Parent]                       -- list of all parents
+    -> BCH.BoundedChan (String)    -- digests channel
+    -> [Int]                       -- frames consumed so far
+    -> IO ()
 startParallelPull parents digestsChan sNrSoFar = do
     (inChans, outChans) <- sparkPullThreads parallelism
     failedTasksChan     <- BCH.newBoundedChan failedTasksChanLength
@@ -82,21 +83,46 @@ assignPullTasks parents digChan fTChan pTIChan =
         -- Get the failed tasks.
         fTasks <- fetchFailedTasks fTChan failedTasksFetchLimit []
         -- Ignore the parents corresponding to failed tasks.
-        ignoreParents parents $ map (\t -> (ptParentIp t, ptParentPort t)) fTasks
+        if length fTasks > 0
+            then putStrLn $ "[pulltask] Found failed tasks: " ++ (show fTasks)
+            else putStr ""
+        ignoreParents parents $
+            map (\t -> (ptParentIp t, ptParentPort t)) fTasks
         -- Fetch any new frame (tuple) from the digest file.
-        let failedTuples = getTupples fTasks
+        let failedTups = getTuples fTasks
         t <- getDigestFileEntry digChan []
-        -- Obtains the top K parents sorted descending by their counters.
-        tParents <- getTopKParents parents parallelism []
         case t of
-            Just tuple  -> assignTuples (tuple:failedTuples) tParents pTIChan 0
-            Nothing     -> assignTuples failedTuples tParents pTIChan 0
-        threadDelay 100000
+            Just tup  -> getParentsAndAssign parents (tup:failedTups) pTIChan
+            Nothing   -> getParentsAndAssign parents failedTups pTIChan
         where
             -- Transforms failed PullTask into tuples of (SeqNr, Digest).
-            getTupples ftu = map (\t -> (ptFrameSeqNr t, ptFrameDigest t)) ftu
+            getTuples ftu = map (\t -> (ptFrameSeqNr t, ptFrameDigest t)) ftu
 
 
+--------------------------------------------------------------------------------
+-- | Searches the top preferable parents and then assigns the tuples to these
+-- parents. Blocks if no viable parent (i.e., with ignore == False) is found.
+getParentsAndAssign ::
+    [Parent]                -- all parents (including ignored ones)
+    -> [(Int, String)]      -- tuples to be assigned
+    -> [C.Chan (PullTask)]  -- pull threads input channel
+    -> IO ()
+getParentsAndAssign parents tuples channels = do
+    tParents <- getTopKParents parents parallelism []
+    if null tParents
+        then do
+            threadDelay 1000000
+            putStrLn $ "[pulltask] No parents found!"
+            getParentsAndAssign parents tuples channels
+        else do
+            assignTuples tuples tParents channels 1
+            threadDelay 1000000
+            return ()
+
+
+--------------------------------------------------------------------------------
+-- | Creates PullTasks out of tuples, then does a round-robin assignments of
+-- these tasks to parents.
 assignTuples ::
     [(Int, String)]         -- tuples that will be assigned
     -> [(String, Int, Int)] -- parents
@@ -104,12 +130,16 @@ assignTuples ::
     -> Int                  -- counter to help distribute the tuples evenly
     -> IO ()
 assignTuples [] _ _ _ = do
-    putStrLn "Finished assigning tuples."
+    -- putStrLn "Finished assigning tuples."
+    return ()
 assignTuples _ [] _ _ = do
-    putStrLn "No parents available for assignTuples!"
+    putStrLn "[pulltask] No parents available for assignTuples!"
 assignTuples _ _ [] _ = do
-    putStrLn "No thread channels available for assignTuples!"
+    putStrLn "[pulltask] No thread channels available for assignTuples!"
 assignTuples ((tSeq, tDig):xt) parents channels cnt = do
+        putStrLn $ "[pulltask] Assigning (" ++ (show tSeq) ++ ", " ++ (show tDig) ++
+            ") to parent (" ++ (show parIp) ++ ", " ++ (show parPort) ++
+            ") and thread " ++ (show idxChannels)
         C.writeChan chan $ PullTask { ptParentIp = parIp
                                     , ptParentPort = parPort
                                     , ptFrameSeqNr = tSeq
@@ -183,7 +213,7 @@ getTopKParents (p:xp) k accum = do
 -- if success, or False if failure.
 -- The parameter k represents the degree of parallelism.
 sparkPullThreads ::
-    Int
+    Int         -- how many threads should start
     -> IO ([C.Chan (PullTask)], [STC.TChan (PullTask)])
 sparkPullThreads para = do
     if para < 1
@@ -205,18 +235,19 @@ sparkPullThreads para = do
 --------------------------------------------------------------------------------
 -- | Main function executed by every thread that pulls frames.
 pullThreadFunc ::
-    C.Chan PullTask     -- input channel
-    -> STC.TChan PullTask  -- output channel
+    C.Chan PullTask         -- input channel
+    -> STC.TChan PullTask   -- output channel
     -> IO ()
-pullThreadFunc iC oC = forever $ do
-    C.readChan iC
-    >>= (\task -> executePullTask task
-    >>= (\mSeqNr -> case mSeqNr of
-                        Just seqNr -> putStrLn $ "Finished.." ++ (show seqNr)
-                        Nothing    ->
-                            atomically $ STC.writeTChan oC (fdTask task)
-                            >> return ()
-        ))
+pullThreadFunc iC oC =
+    forever $ do
+        C.readChan iC
+        >>= (\task -> executePullTask task
+        >>= (\mSeqNr -> case mSeqNr of
+                            Just seqNr -> putStrLn $ "Finished.." ++ (show seqNr)
+                            Nothing    ->
+                                atomically $ STC.writeTChan oC (fdTask task)
+                                >> return ()
+            ))
     where
         -- Transforms a Task into a failed Task, i.e., updates the ptStatus
         -- record field to False.
@@ -226,7 +257,9 @@ pullThreadFunc iC oC = forever $ do
 --------------------------------------------------------------------------------
 -- | Pulls a frame from a given parent and returns the sequence number for that
 -- frame. The frame is identified by a (sequence number, digest) tuple.
-executePullTask :: PullTask -> IO (Maybe Int)
+executePullTask ::
+    PullTask
+    -> IO (Maybe Int)
 executePullTask task = do
     bytes <- pullBytes (ptParentIp task) (ptParentPort task) seqNr
     putStrLn $ "Verifying if the digest matches"
@@ -246,7 +279,11 @@ executePullTask task = do
 -- data that was pulled. In case of error, the Bytestring is empty. Various
 -- reasons can cause errors: the parent contains corrupted frames, it has no
 -- frames at all, has no running http server, etc.
-pullBytes :: String -> Int -> Int -> IO (L.ByteString)
+pullBytes ::
+    String  -- IP of the parent
+    -> Int  -- port of the parent
+    -> Int  -- sequence number of the frame that will be pulled
+    -> IO (L.ByteString)
 pullBytes ip port seqNr = do
     result <- httpGetFrameBytes $ constructFrameURL ip port seqNr
     case result of
@@ -258,10 +295,11 @@ pullBytes ip port seqNr = do
 -- | Reads from the channel with failed tasks and returns at most P of them.
 -- Does not block: if less than P tasks are available, it only returns those
 -- tasks.
-fetchFailedTasks :: BCH.BoundedChan (PullTask)
-                  -> Int
-                  -> [PullTask]
-                  -> IO ([PullTask])
+fetchFailedTasks ::
+    BCH.BoundedChan (PullTask)  -- channel with failed PullTasks
+    -> Int                      -- limit on how many tasks shall be retrieved
+    -> [PullTask]               -- accumulator
+    -> IO ([PullTask])
 fetchFailedTasks _      0 accum = return accum
 fetchFailedTasks ffChan l accum = do
     mFF <- BCH.tryReadChan ffChan
@@ -274,7 +312,11 @@ fetchFailedTasks ffChan l accum = do
 -- | Marks the pIgnore record field for some given parents to True.
 -- The parents that will be marked are identified by the second argument: a
 -- tuple of (Ip, Port).
-ignoreParents :: [Parent] -> [(String, Int)] -> IO ()
+ignoreParents ::
+    [Parent]            -- all parents
+    -> [(String, Int)]  -- identifiers of parents that will be marked with
+                        -- ignore = True
+    -> IO ()
 ignoreParents _       []              = return ()
 ignoreParents parents ((ip, port):xs) = do
     putStrLn $ "Warning: Ignoring parent: " ++ ip ++ ":" ++ (show port)
