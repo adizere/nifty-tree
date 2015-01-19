@@ -146,14 +146,19 @@ findNeighbor (n:ns) sIp sPort
         cyNum = nbCycleNumber n
         cyDir = nbCycleDirection n
 
-
+-- | Verifies the counter at each parent and updates the fields 'pLatestCounter'
+-- and 'pLatestETag'.
+-- This function never returns, so it will check every parent inifinitely often.
 checkParents :: ParentsSelection -> IO ()
-checkParents pSelection = forever $ do
-    mapM_ checkOneParent $ psList pSelection
-    threadDelay checkParentsDelay
-    return ()
+checkParents pSelection =
+    forever $ do
+        mapM_ checkOneParent $ psList pSelection
+        threadDelay checkParentsDelay
+        return ()
 
 
+-- | Performs the check of one given parent, updating the coresponing record
+-- fields of counter and ETag.
 checkOneParent :: Parent -> IO ()
 checkOneParent cp = do
     putStrLn $ "[pchecker] Checking parent " ++ show cp
