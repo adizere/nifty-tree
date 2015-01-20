@@ -23,7 +23,7 @@ import Control.Exception.Base (finally)
 
 -- directory with session file descriptors
 sessionDirectory :: FilePath
-sessionDirectory = "."
+sessionDirectory = "/opt/streamer"
 
 
 -- each SessionHandle describes a running session

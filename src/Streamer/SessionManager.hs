@@ -12,7 +12,7 @@ import System.IO                        ( IOMode(ReadMode), openFile )
 
 -- Path to the file holding the list of digests
 digestsFilePath :: FilePath
-digestsFilePath = "/mnt/lpd-distlib/streamer/v1/digests.list"
+digestsFilePath = "/opt/streamer/digests.list"
 
 
 -- Length of the BoundedChan which holds the digests

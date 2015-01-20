@@ -7,6 +7,7 @@ import Streamer.Session ( getAllSessions
                         , shMVar
                         , SessionHandle )
 
+import System.Environment (getArgs)
 import Data.List
 import Control.Concurrent   -- for MVar control
 import Control.Monad        -- for filterM
@@ -19,14 +20,35 @@ sleepTimeMs = 1000000
 
 main :: IO ()
 main = do
-    mainLoop [] ""
+    argz <- getArgs
+    if ( (length argz >= 1 ) && (head argz) == "-a")
+        then autoStream
+        else interactiveStream [] ""
+
+
+-- | Automatically starts to try and stream data, from the first session found.
+autoStream :: IO ()
+autoStream = do
+    sId <- doStartSession ""  -- starts session described in file "session.json"
+    waitForAutoSession sId    -- returns when the session finishes
+    return ()
+
+
+-- |
+waitForAutoSession :: SessionHandle -> IO ()
+waitForAutoSession sId = do
+    stillRunning <- checkRunningSessions [sId]
+    if length stillRunning > 0
+        then
+            threadDelay 1000000 >> waitForAutoSession sId
+        else return ()
 
 
 --
 -- takes care of Session selection and Session starting
 --
-mainLoop :: [SessionHandle] -> String -> IO ()
-mainLoop sessionHandles startNewSessionId = do
+interactiveStream :: [SessionHandle] -> String -> IO ()
+interactiveStream sessionHandles startNewSessionId = do
     runningSessionHandles <- checkRunningSessions sessionHandles
     putStrLn $ "The running sessions are: " ++ (show runningSessionHandles)
     allSessionIds <- getAllSessions
@@ -37,7 +59,7 @@ mainLoop sessionHandles startNewSessionId = do
         then do
             -- fires up another session, & calls itself with revised arguments
             newSession <- doStartSession startNewSessionId
-            mainLoop (newSession:runningSessionHandles) ""
+            interactiveStream (newSession:runningSessionHandles) ""
         else do
             -- allows the user to choose a Session to start
             maybeId <- chooseNewSessionId allSessionIds runningSessionIds
@@ -49,10 +71,10 @@ mainLoop sessionHandles startNewSessionId = do
             case can of
                 -- if the choice is valid, then the function calls itself with
                 -- the chosen Session Id
-                True  -> mainLoop runningSessionHandles maybeId
+                True  -> interactiveStream runningSessionHandles maybeId
                 False -> putStrLn msg
             -- calls itself in case of invalid SessionId choice
-            mainLoop runningSessionHandles ""
+            interactiveStream runningSessionHandles ""
 
 
 -- presents the runningSessions and allSessions information
