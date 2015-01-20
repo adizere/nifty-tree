@@ -63,7 +63,7 @@ startParallelPull ::
     -> BCH.BoundedChan (String)    -- digests channel
     -> [Int]                       -- frames consumed so far
     -> IO ()
-startParallelPull parents digestsChan sNrSoFar = do
+startParallelPull parents digestsChan _ = do
     (inChans, outChans) <- sparkPullThreads parallelism
     failedTasksChan     <- BCH.newBoundedChan failedTasksChanLength
     _ <- forkIO (assignPullTasks parents digestsChan failedTasksChan inChans)

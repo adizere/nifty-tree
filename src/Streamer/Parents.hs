@@ -55,6 +55,20 @@ maybeSelectParents sessionFileName = do
 
 assembleParents :: OverlayInfo -> [Int] -> ([Neighbor], Int)
 assembleParents overlayInfo randomInts =
+    if (oiSourceLink overlayInfo == True)
+        -- If the source node is directly linked, then select it
+        then ([sourceNode], (oiRevision overlayInfo))
+        -- Otherwise, assemble some random nodes..
+        else assembleRandomParents overlayInfo randomInts
+    where
+        sourceNode = Neighbor { nbIp = oiSourceIp overlayInfo
+                              , nbPort = oiSourcePort overlayInfo
+                              , nbCycleNumber = 0
+                              , nbCycleDirection = 0 }
+
+
+assembleRandomParents :: OverlayInfo -> [Int] -> ([Neighbor], Int)
+assembleRandomParents overlayInfo randomInts =
     ( selectParents overlayInfo randomInts srcCyNum srcCyDir
     , oiRevision overlayInfo)
     where

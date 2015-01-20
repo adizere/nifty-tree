@@ -80,7 +80,7 @@ runSession sId = do
     mSManager <- getSessionManager sId
     case mSManager of
         Just sm     -> do
-            putStrLn $ sId ++ " session: " ++ (show sm)
+            -- putStrLn $ sId ++ " session: " ++ (show sm)
             startSessionManager sm
             -- runSession sId
         Nothing     -> putStrLn "err: Couldn't read the session file!"

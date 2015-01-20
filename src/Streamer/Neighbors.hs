@@ -32,6 +32,7 @@ data OverlayInfo = OverlayInfo
     , oiRevision    :: Int
     , oiSourceIp    :: String
     , oiSourcePort  :: Int
+    , oiSourceLink  :: Bool
     } deriving (Eq, Show)
 
 
@@ -40,7 +41,8 @@ instance FromJSON OverlayInfo where
                           v .: "oiNeighbors" <*>
                           v .: "oiRevision" <*>
                           v .: "oiSourceIp" <*>
-                          v .: "oiSourcePort"
+                          v .: "oiSourcePort" <*>
+                          v .: "oiSourceLink"
 
     parseJSON _ = mzero
 

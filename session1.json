@@ -1,6 +1,7 @@
 {   "oiRevision": 1,
     "oiSourceIp": "127.0.0.1",
     "oiSourcePort": 80,
+    "oiSourceLink": "True",
     "oiNeighbors":[
         {   "nbIp": "127.0.0.1",
             "nbPort": 80,

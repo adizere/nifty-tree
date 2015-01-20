@@ -35,6 +35,7 @@ instance Show SessionManager where
 -- | Main function executed by each SessionManager.
 startSessionManager :: SessionManager -> IO ()
 startSessionManager sManager = do
+    putStrLn $ "Selected parents: " ++ (show $ smParents sManager)
     h    <- openFile digestsFilePath ReadMode
     chan <- newBoundedChan digestsChanLength
     _    <- forkIO (consumeDgstFile h chan 0)

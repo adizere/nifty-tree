@@ -3,8 +3,8 @@ import System.Random
 import qualified Data.Map as DM
 
 
--- rollDice :: IO Int
--- rollDice = getStdRandom (randomR (1,6))
+rollDice :: IO Int
+rollDice = getStdRandom (randomR (10,30))
 
 
 -- getRandoms :: (Int, Int) -> Int -> IO [Int]
@@ -63,6 +63,7 @@ shuffle gen l =
 main = do
     -- a <- getNonRepeatingRandoms (1, 100) 10
     -- putStrLn $ (show a)
-    g <- getStdGen
-    let (l, gen) = shuffle g $ [1..100]
-    putStrLn $ (show l)
+    -- g <- getStdGen
+    -- let (l, gen) = shuffle g $ [1..100]
+    -- putStrLn $ (show l)
+    mapM_ (\r -> rollDice >>= \d -> putStrLn (show d)) [1..100]
