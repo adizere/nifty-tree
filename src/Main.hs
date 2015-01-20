@@ -34,7 +34,7 @@ autoStream = do
     return ()
 
 
--- |
+-- | Waits until a given session finishes and then returns.
 waitForAutoSession :: SessionHandle -> IO ()
 waitForAutoSession sId = do
     stillRunning <- checkRunningSessions [sId]
