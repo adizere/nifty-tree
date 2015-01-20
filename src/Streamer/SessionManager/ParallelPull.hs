@@ -12,6 +12,7 @@ import Control.Concurrent.MVar
 import Control.Concurrent                       ( threadDelay, forkIO )
 import Control.Monad                            ( forever )
 import Control.Monad.STM                        ( atomically )
+import System.Clock                             as K
 import qualified Data.ByteString.Lazy           as L
 import qualified Data.List.Ordered              as R
 import qualified Control.Concurrent.Chan        as C
@@ -243,7 +244,7 @@ pullThreadFunc iC oC =
         C.readChan iC
         >>= (\task -> executePullTask task
         >>= (\mSeqNr -> case mSeqNr of
-                            Just seqNr -> putStrLn $ "Finished.." ++ (show seqNr)
+                            Just seqNr -> deliverSeqNr seqNr
                             Nothing    ->
                                 atomically $ STC.writeTChan oC (fdTask task)
                                 >> return ()
@@ -252,6 +253,11 @@ pullThreadFunc iC oC =
         -- Transforms a Task into a failed Task, i.e., updates the ptStatus
         -- record field to False.
         fdTask task = task { ptStatus = Just False }
+        -- Pretty prints a K.TimeSpec data.
+        showTime t = (show $ K.sec t) ++ "." ++ (show $ K.nsec t)
+        -- Delivers (prints) a seq. number, tagged with the current real time.
+        deliverSeqNr s = K.getTime (K.Realtime)
+            >>= (\t -> putStrLn $ (showTime t) ++ " d " ++ (show s))
 
 
 --------------------------------------------------------------------------------
