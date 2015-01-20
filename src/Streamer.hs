@@ -1,4 +1,0 @@
-module Streamer
-( Node
-,
-) where
