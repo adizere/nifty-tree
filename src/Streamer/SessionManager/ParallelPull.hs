@@ -39,6 +39,11 @@ failedTasksFetchLimit :: Int
 failedTasksFetchLimit = 5
 
 
+-- | Local counter file, keeps the latest sequence number fetched
+localCounterPath :: FilePath
+localCounterPath = framesPersistPrefix ++ "counter"
+
+
 --------------------------------------------------------------------------------
 -- Data Types
 
@@ -244,7 +249,8 @@ pullThreadFunc iC oC =
         C.readChan iC
         >>= (\task -> executePullTask task
         >>= (\mSeqNr -> case mSeqNr of
-                            Just seqNr -> deliverSeqNr seqNr
+                            Just seqNr ->
+                                deliverSeqNr seqNr >> updateLocalCounter seqNr
                             Nothing    ->
                                 atomically $ STC.writeTChan oC (fdTask task)
                                 >> return ()
@@ -258,6 +264,9 @@ pullThreadFunc iC oC =
         -- Delivers (prints) a seq. number, tagged with the current real time.
         deliverSeqNr s = K.getTime (K.Realtime)
             >>= (\t -> putStrLn $ (showTime t) ++ " d " ++ (show s))
+        -- Writes the sequnce number to the local counter file
+        updateLocalCounter s =
+            writeFile localCounterPath $ show s
 
 
 --------------------------------------------------------------------------------
@@ -271,12 +280,8 @@ executePullTask task = do
     bytes <- pullBytes (ptParentIp task) parentListeningPort seqNr
     putStrLn $ "Verifying if the digest matches"
     if verifyDigest (ptFrameDigest task) bytes == True
-        then do
-            persistFrame seqNr bytes
-            return $ Just seqNr
-        else do
-            putStrLn "Invalid digest!"
-            return Nothing
+        then persistFrame seqNr bytes >> return (Just seqNr)
+        else putStrLn "Invalid digest!" >> return Nothing
     where
         seqNr = ptFrameSeqNr task
 
