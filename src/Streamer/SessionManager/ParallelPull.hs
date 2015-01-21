@@ -267,7 +267,8 @@ executePullTask ::
     PullTask
     -> IO (Maybe Int)
 executePullTask task = do
-    bytes <- pullBytes (ptParentIp task) (ptParentPort task) seqNr
+    -- The port that serves frames is predefined: parentListeningPort = 80
+    bytes <- pullBytes (ptParentIp task) parentListeningPort seqNr
     putStrLn $ "Verifying if the digest matches"
     if verifyDigest (ptFrameDigest task) bytes == True
         then do

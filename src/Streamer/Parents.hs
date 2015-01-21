@@ -16,6 +16,11 @@ checkParentsDelay :: Int
 checkParentsDelay = 1000000     -- 1.000.000 us = 1 second
 
 
+-- | Default port for HTTP requests to any parent
+parentListeningPort :: Int
+parentListeningPort = 80
+
+
 data Parent = Parent
     { pIp              :: String
     , pPort            :: Int
@@ -177,7 +182,8 @@ checkOneParent :: Parent -> IO ()
 checkOneParent cp = do
     putStrLn $ "[pchecker] Checking parent " ++ show cp
     cEtag <- readMVar (pLatestETag cp)
-    mCntr <- httpGetCounter (constructCounterURL (pIp cp) (pPort cp)) cEtag
+    mCntr <- httpGetCounter
+                (constructCounterURL (pIp cp) parentListeningPort) cEtag
     case mCntr of
         Just (counter, etag) ->
             (swapMVar (pLatestCounter cp) counter)
