@@ -51,7 +51,7 @@ function reload_service_code()
 function start_service()
 {
     echo `date` "Starting up.." >> "${output}"
-    eval "${exec}" &
+    eval "${exec} -a >${log_file} 2>&1" &
 }
 
 
@@ -64,7 +64,7 @@ log_file=`printf "/logs/node.%s.log.nifty" $local_address`
 
 
 dir=$TP
-exec="${dir}/dist/build/nifty-tree/nifty-tree -a >${log_file} 2>&1"
+exec="${dir}/dist/build/nifty-tree/nifty-tree"
 output="/tmp/nifty-tree-status"
 
 echo `date` "nifty-tree init script: $1" >> "${output}"
