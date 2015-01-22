@@ -61,15 +61,15 @@ local_address=`GET http://169.254.169.254/latest/meta-data/local-ipv4`
 log_file=`printf "/logs/node.%s.log.nifty" $local_address`
 
 
-dir=${TP}
-nifty_exec="dist/build/nifty-tree/nifty-tree"
+target_dir="/home/ec2-user/git/nifty-tree/"
+nifty_exec="${target_dir}/dist/build/nifty-tree/nifty-tree"
 output="/tmp/nifty-tree-status"
 
 echo `date` "nifty-tree init script: $1" >> "${output}"
 
 touch "${log_file}"
 
-cd ${dir}
+cd ${target_dir}
 
 
 if [ "$1" = "start" ]; then
