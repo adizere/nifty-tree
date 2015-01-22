@@ -28,7 +28,7 @@ function wait4_session_files()
 function stop_service()
 {
     echo `date` "Trying to stop the nifty-tree service.." >> "${output}"
-    pkill -9 -f "${exec}" || echo `date` \
+    pkill -9 -f "${nifty_exec}" || echo `date` \
         "nifty-tree wasn't running" >> "${output}"
 }
 
@@ -36,13 +36,11 @@ function stop_service()
 function reload_service_code()
 {
     echo `date` "Reloading nifty-tree directly from git.." >> "${output}"
-    set -e
 
-    cd /home/ec2-user/git/nifty-tree
-
-    git pull
-    cabal install --only-dependencies
-    cabal build
+    git pull || echo `date` "Couldn't pull from git" >> "${output}"
+    cabal install --only-dependencies || echo `date`\
+        "Error installing dependencies" >> "${output}"
+    cabal build || echo `date` "Error building nifty-tree" >> "${output}"
 
     echo `date` "Finished reloading" >> "${output}"
 }
@@ -51,7 +49,7 @@ function reload_service_code()
 function start_service()
 {
     echo `date` "Starting up.." >> "${output}"
-    eval "${exec} -a >${log_file} 2>&1" &
+    eval "${nifty_exec} -a >${log_file} 2>&1" &
 }
 
 
@@ -63,15 +61,15 @@ local_address=`GET http://169.254.169.254/latest/meta-data/local-ipv4`
 log_file=`printf "/logs/node.%s.log.nifty" $local_address`
 
 
-dir=$TP
-exec="${dir}/dist/build/nifty-tree/nifty-tree"
+dir=${TP}
+nifty_exec="dist/build/nifty-tree/nifty-tree"
 output="/tmp/nifty-tree-status"
 
 echo `date` "nifty-tree init script: $1" >> "${output}"
 
 touch "${log_file}"
 
-cd $dir
+cd ${dir}
 
 
 if [ "$1" = "start" ]; then
