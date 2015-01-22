@@ -6,7 +6,7 @@ module Streamer.SessionManager.ParallelPull
 import Streamer.Parents
 import Streamer.Frames
 import Streamer.HTTPClient  ( httpGetFrameBytes, constructFrameURL )
-import Streamer.SessionManager.DigestsFile ( getDigestFileEntry )
+import Streamer.SessionManager.DigestsFile ( collectDigestFileEntries )
 
 import Control.Concurrent.MVar
 import Control.Concurrent                       ( threadDelay, forkIO )
@@ -96,10 +96,8 @@ assignPullTasks parents digChan fTChan pTIChan =
             map (\t -> (ptParentIp t, ptParentPort t)) fTasks
         -- Fetch any new frame (tuple) from the digest file.
         let failedTups = getTuples fTasks
-        t <- getDigestFileEntry digChan []
-        case t of
-            Just tup  -> getParentsAndAssign parents (tup:failedTups) pTIChan
-            Nothing   -> getParentsAndAssign parents failedTups pTIChan
+        entriez <- collectDigestFileEntries digChan [] 10 []
+        getParentsAndAssign parents (entriez++failedTups) pTIChan
         where
             -- Transforms failed PullTask into tuples of (SeqNr, Digest).
             getTuples ftu = map (\t -> (ptFrameSeqNr t, ptFrameDigest t)) ftu
@@ -122,7 +120,6 @@ getParentsAndAssign parents tuples channels = do
             getParentsAndAssign parents tuples channels
         else do
             assignTuples tuples tParents channels 1
-            threadDelay 300000
             return ()
 
 
@@ -136,7 +133,6 @@ assignTuples ::
     -> Int                  -- counter to help distribute the tuples evenly
     -> IO ()
 assignTuples [] _ _ _ = do
-    -- putStrLn "Finished assigning tuples."
     return ()
 assignTuples _ [] _ _ = do
     putStrLn "[pulltask] No parents available for assignTuples!"
@@ -278,7 +274,6 @@ executePullTask ::
 executePullTask task = do
     -- The port that serves frames is predefined: parentListeningPort = 80
     bytes <- pullBytes (ptParentIp task) parentListeningPort seqNr
-    putStrLn $ "Verifying if the digest matches"
     if verifyDigest (ptFrameDigest task) bytes == True
         then persistFrame seqNr bytes >> return (Just seqNr)
         else putStrLn "Invalid digest!" >> return Nothing

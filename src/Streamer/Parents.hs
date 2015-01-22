@@ -167,7 +167,8 @@ findNeighbor (n:ns) sIp sPort
 
 -- | Verifies the counter at each parent and updates the fields 'pLatestCounter'
 -- and 'pLatestETag'.
--- This function never returns, so it will check every parent inifinitely often.
+-- This function never returns, so it will check every parent at a regular
+-- interval for as long as the program executes.
 checkParents :: ParentsSelection -> IO ()
 checkParents pSelection =
     forever $ do
@@ -180,13 +181,13 @@ checkParents pSelection =
 -- fields of counter and ETag.
 checkOneParent :: Parent -> IO ()
 checkOneParent cp = do
-    putStrLn $ "[pchecker] Checking parent " ++ show cp
+    -- putStrLn $ "[pchecker] Checking parent " ++ show cp
     cEtag <- readMVar (pLatestETag cp)
     mCntr <- httpGetCounter
                 (constructCounterURL (pIp cp) parentListeningPort) cEtag
     case mCntr of
         Just (counter, etag) ->
             (swapMVar (pLatestCounter cp) counter)
-            >>= (\v -> putStrLn $ "[pchecker] Previous val was: " ++ (show v))
+            -- >>= (\v -> putStrLn $ "[pchecker] Previous val was: " ++ (show v))
             >> (swapMVar (pLatestETag cp) etag) >> return ()
         Nothing -> return ()

@@ -1,6 +1,6 @@
 module Streamer.SessionManager.DigestsFile
 ( consumeDgstFile
-, getDigestFileEntry
+, collectDigestFileEntries
 ) where
 
 
@@ -48,6 +48,27 @@ consumeDgstFile h c skipNr = do
                 then consumeDgstFile h c $ skipNr - 1
                 else BCH.writeChan c line
     consumeDgstFile h c 0
+
+
+-- | Collects entries from the digest file until either K are found or there is
+-- no available entry. Optionally it takes as parameter a list of sequence
+-- numbers to be skipped over.
+--
+-- Uses: 'getDigestFileEntry'
+collectDigestFileEntries ::
+    BCH.BoundedChan (String)    -- channel with digest lines
+    -> [Int]                    -- list of sequence numbers to be ignored
+    -> Int                      -- limit on the number of returned entries
+    -> [(Int,String)]           -- accumulator
+    -> IO [(Int, String)]
+collectDigestFileEntries _    _             0     accum = return accum
+collectDigestFileEntries chan skipSeqNrList limit accum = do
+    mEntry <- getDigestFileEntry chan skipSeqNrList
+    case mEntry of
+        Just entry ->
+            collectDigestFileEntries chan skipSeqNrList (limit-1) (entry:accum)
+        Nothing ->
+            return accum
 
 
 --------------------------------------------------------------------------------
