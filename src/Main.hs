@@ -7,6 +7,7 @@ import Streamer.Session ( getAllSessions
                         , shMVar
                         , SessionHandle )
 
+import System.IO          (hSetBuffering, stdout, BufferMode(LineBuffering))
 import System.Environment (getArgs)
 import Data.List
 import Control.Concurrent   -- for MVar control
@@ -20,6 +21,7 @@ sleepTimeMs = 1000000
 
 main :: IO ()
 main = do
+    hSetBuffering stdout LineBuffering
     argz <- getArgs
     if ( (length argz >= 1 ) && (head argz) == "-a")
         then autoStream

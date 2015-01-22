@@ -14,7 +14,7 @@ import System.IO                                ( Handle, hGetLine, hIsEOF )
 
 -- How much to wait if the digests file EOF found, in microseconds
 consumeDigestsFileDelay :: Int
-consumeDigestsFileDelay = 1000000
+consumeDigestsFileDelay = 500000
 
 
 -- | Consumes lines from a digest file and appends the lines to a BoundedChan.

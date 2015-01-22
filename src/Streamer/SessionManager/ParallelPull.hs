@@ -117,12 +117,12 @@ getParentsAndAssign parents tuples channels = do
     tParents <- getTopKParents parents parallelism []
     if null tParents
         then do
-            threadDelay 1000000
+            threadDelay 500000
             putStrLn $ "[pulltask] No parents found!"
             getParentsAndAssign parents tuples channels
         else do
             assignTuples tuples tParents channels 1
-            threadDelay 1000000
+            threadDelay 300000
             return ()
 
 
