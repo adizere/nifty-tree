@@ -66,3 +66,28 @@ _shuffleStep :: RandomGen g => (DM.Map Int a, g) -> (Int, a) -> (DM.Map Int a, g
 _shuffleStep (m, gen) (i, x) = ((DM.insert j x . DM.insert i (m DM.! j)) m, gen')
     where
         (j, gen') = randomR (0, i) gen
+
+
+
+-- | Transforms a list of numbers such that they are all unique and strictly
+-- smaller than a given number.
+uniqueWrappedNumbers ::
+    [Int]       -- ^ Initial list of numbers
+    -> Int      -- ^ Strict upper limit around which we wrap the numbers
+    -> [Int]    -- ^ Accumulator for the final list of numbers
+    -> [Int]    -- ^ Final list of numbers
+uniqueWrappedNumbers []     _ a = a
+uniqueWrappedNumbers (x:xs) l a =
+    -- Basic check that we can accomplish this computation
+    if (length xs) + 1 > l
+        then error "Cannot transform list: the limit is too small!"
+        else
+            if (tMod x) `elem` a
+                then uniqueWrappedNumbers xs l ((searchNextX x):a)
+                else uniqueWrappedNumbers xs l ((tMod x):a)
+    where
+        searchNextX nx =
+            if (tMod $ nx+1) `elem` a
+                    then searchNextX (nx+1)
+                    else tMod $ nx+1
+        tMod t = t `mod` l
