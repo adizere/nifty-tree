@@ -1,0 +1,10 @@
+#!/bin/sh
+#
+# nifty-tree     Cleanup procedure
+#
+# description: Cleans an EC2 instance. Needed prior to creating an AMI.
+
+
+rm -f /logs/*
+truncate nifty-tree-status --size 0
+truncate robostreamer-status --size 0
