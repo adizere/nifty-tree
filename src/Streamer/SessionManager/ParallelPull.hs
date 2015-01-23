@@ -9,6 +9,9 @@ import Streamer.HTTPClient  ( httpGetFrameBytes, constructFrameURL )
 import Streamer.SessionManager.DigestsFile ( collectDigestFileEntries )
 
 import Control.Concurrent.MVar
+import System.IO                                ( withFile
+                                                , IOMode(WriteMode)
+                                                , hPutStr )
 import Control.Concurrent                       ( threadDelay, forkIO )
 import Control.Monad                            ( forever )
 import Control.Monad.STM                        ( atomically )
@@ -262,7 +265,7 @@ pullThreadFunc iC oC =
             >>= (\t -> putStrLn $ (showTime t) ++ " d " ++ (show s))
         -- Writes the sequnce number to the local counter file
         updateLocalCounter s =
-            writeFile localCounterPath $ show s
+            withFile localCounterPath WriteMode (\h -> hPutStr h $ show s)
 
 
 --------------------------------------------------------------------------------
