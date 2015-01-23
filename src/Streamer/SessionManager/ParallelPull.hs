@@ -149,8 +149,8 @@ assignTuples ((tSeq, tDig):xt) parents channels cnt = do
                                     , ptStatus = Nothing}
         assignTuples xt parents channels $ cnt+1
     where
-        idxParents = (length parents) `rem` cnt
-        idxChannels = (length channels) `rem` cnt
+        idxParents = cnt `mod` (length parents)
+        idxChannels = cnt `mod` (length channels)
         (parIp, parPort, _) = parents!!idxParents
         chan = channels!!idxChannels
 

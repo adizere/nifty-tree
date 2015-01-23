@@ -68,12 +68,17 @@ _shuffleStep (m, gen) (i, x) = ((DM.insert j x . DM.insert i (m DM.! j)) m, gen'
         (j, gen') = randomR (0, i) gen
 
 
-
 -- | Transforms a list of numbers such that they are all unique and strictly
 -- smaller than a given number.
+--
+-- Some examples:
+-- > uniqueWrappedNumbers [0,1,0]       3 [] = [2,1,0]
+-- > uniqueWrappedNumbers [1,1,1,1]     4 [] = [0,3,2,1]
+-- > uniqueWrappedNumbers [0,0,0,1,1,1] 5 [] = [5..0]
+-- > uniqueWrappedNumbers [100,200,300] 3 [] = [0,2,1]
 uniqueWrappedNumbers ::
     [Int]       -- ^ Initial list of numbers
-    -> Int      -- ^ Strict upper limit around which we wrap the numbers
+    -> Int      -- ^ Open upper limit, for wrapping the numbers
     -> [Int]    -- ^ Accumulator for the final list of numbers
     -> [Int]    -- ^ Final list of numbers
 uniqueWrappedNumbers []     _ a = a
