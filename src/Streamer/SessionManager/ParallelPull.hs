@@ -15,6 +15,7 @@ import System.IO                                ( withFile
 import Control.Concurrent                       ( threadDelay, forkIO )
 import Control.Monad                            ( forever )
 import Control.Monad.STM                        ( atomically )
+import Data.Maybe                               ( isJust, fromJust )
 import System.Clock                             as K
 import qualified Data.ByteString.Lazy           as L
 import qualified Data.List.Ordered              as R
@@ -171,14 +172,18 @@ collectPullTasks failedTasksChan pullThreadsOChan =
         mapM_ (extractTask failedTasksChan) pullThreadsOChan
         threadDelay 100000
     where
+        -- Writes the sequnce number to the local counter file
+        updateLocalCounter s =
+            withFile localCounterPath WriteMode (\h -> hPutStr h $ show s)
         extractTask fChan oChan = do
             empt <- atomically $ STC.isEmptyTChan oChan
             if empt
                 then return ()
                 else do
                     a <- atomically $ STC.readTChan oChan
-                    BCH.writeChan fChan a
-                    return ()
+                    if (ptStatus a == Just True)
+                        then updateLocalCounter (ptFrameSeqNr a)
+                        else BCH.writeChan fChan a
 
 
 --------------------------------------------------------------------------------
@@ -247,25 +252,23 @@ pullThreadFunc iC oC =
     forever $ do
         C.readChan iC
         >>= (\task -> executePullTask task
-        >>= (\mSeqNr -> case mSeqNr of
-                            Just seqNr ->
-                                deliverSeqNr seqNr >> updateLocalCounter seqNr
-                            Nothing    ->
-                                atomically $ STC.writeTChan oC (fdTask task)
-                                >> return ()
+        >>= (\mSeqNr ->
+                if isJust mSeqNr
+                    then do
+                        deliverSeqNr (fromJust mSeqNr)
+                        atomically $ STC.writeTChan oC (okT task)
+                    else atomically $ STC.writeTChan oC (fdT task)
             ))
     where
         -- Transforms a Task into a failed Task, i.e., updates the ptStatus
         -- record field to False.
-        fdTask task = task { ptStatus = Just False }
+        fdT task = task { ptStatus = Just False }
+        okT task = task { ptStatus = Just True }
         -- Pretty prints a K.TimeSpec data.
         showTime t = (show $ K.sec t) ++ "." ++ (show $ K.nsec t)
         -- Delivers (prints) a seq. number, tagged with the current real time.
         deliverSeqNr s = K.getTime (K.Realtime)
             >>= (\t -> putStrLn $ (showTime t) ++ " d " ++ (show s))
-        -- Writes the sequnce number to the local counter file
-        updateLocalCounter s =
-            withFile localCounterPath WriteMode (\h -> hPutStr h $ show s)
 
 
 --------------------------------------------------------------------------------
