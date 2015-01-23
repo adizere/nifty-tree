@@ -6,5 +6,6 @@
 
 
 rm -f /logs/*
-truncate nifty-tree-status --size 0
-truncate robostreamer-status --size 0
+rm -f /opt/streamer/*
+truncate /tmp/nifty-tree-status --size 0
+truncate /tmp/robostreamer-status --size 0
