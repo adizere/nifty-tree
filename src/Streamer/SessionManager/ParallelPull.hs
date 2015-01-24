@@ -72,10 +72,10 @@ startParallelPull ::
     -> BCH.BoundedChan (String)    -- digests channel
     -> [Int]                       -- frames consumed so far
     -> IO ()
-startParallelPull parents digestsChan _ = do
+startParallelPull parents digChan _ = do
     (inChans, outChans) <- sparkPullThreads parallelism
     failedTasksChan     <- BCH.newBoundedChan failedTasksChanLength
-    _ <- forkIO (assignPullTasks parents digestsChan failedTasksChan inChans)
+    _ <- forkIO (assignPullTasks parents digChan failedTasksChan inChans [])
     collectPullTasks failedTasksChan outChans
 
 
@@ -87,21 +87,27 @@ assignPullTasks ::
     -> BCH.BoundedChan (String)     -- digests for tasks come through here
     -> BCH.BoundedChan (PullTask)   -- failed tasks come through here
     -> [C.Chan (PullTask)]          -- pull threads input channel
+    -> [(Int, String)]              -- unassigned tasks (in the form of tuples)
     -> IO ()
-assignPullTasks parents digChan fTChan pTIChan =
-    forever $ do
+assignPullTasks prntz digChan fTChan pTIChan unag = do
         -- Get the failed tasks.
         fTasks <- fetchFailedTasks fTChan failedTasksFetchLimit []
         -- Ignore the parents corresponding to failed tasks.
         if length fTasks > 0
             then putStrLn $ "[pulltask] Found failed tasks: " ++ (show fTasks)
             else putStr ""
-        ignoreParents parents $
+        ignoreParents prntz $
             map (\t -> (ptParentIp t, ptParentPort t)) fTasks
         -- Fetch any new frame (tuple) from the digest file.
-        let failedTups = getTuples fTasks
-        entriez <- collectDigestFileEntries digChan [] 10 []
-        getParentsAndAssign parents (entriez++failedTups) pTIChan
+        let faildTups = getTuples fTasks
+        ntriz <- collectDigestFileEntries digChan [] 10 []
+        newUnag <- getParentsAndAssign prntz (unag++ntriz++faildTups) pTIChan
+        if (null fTasks) && (null ntriz) && (null newUnag)
+            then
+            -- If there were no tasks, then we can rest a bit
+                threadDelay 300000
+                >> assignPullTasks prntz digChan fTChan pTIChan newUnag
+            else assignPullTasks prntz digChan fTChan pTIChan newUnag
         where
             -- Transforms failed PullTask into tuples of (SeqNr, Digest).
             getTuples ftu = map (\t -> (ptFrameSeqNr t, ptFrameDigest t)) ftu
@@ -110,53 +116,74 @@ assignPullTasks parents digChan fTChan pTIChan =
 --------------------------------------------------------------------------------
 -- | Searches the top preferable parents and then assigns the tuples to these
 -- parents. Blocks if no viable parent (i.e., with ignore == False) is found.
+-- If any tuples remain unassigned, it returns them.
 getParentsAndAssign ::
     [Parent]                -- all parents (including ignored ones)
     -> [(Int, String)]      -- tuples to be assigned
     -> [C.Chan (PullTask)]  -- pull threads input channel
-    -> IO ()
-getParentsAndAssign parents tuples channels = do
-    tParents <- getTopKParents parents parallelism []
-    if null tParents
+    -> IO ([(Int, String)])
+getParentsAndAssign parents tp chnlz = do
+    topParents <- getTopKParents parents parallelism []
+    if null topParents
         then do
             threadDelay 500000
             putStrLn $ "[pulltask] No parents found!"
-            getParentsAndAssign parents tuples channels
-        else do
-            assignTuples tuples tParents channels 1
-            return ()
+            getParentsAndAssign parents tp chnlz
+        else
+            assignTuples tp topParents chnlz 1 [] >>= (\unag -> return unag)
 
 
 --------------------------------------------------------------------------------
 -- | Creates PullTasks out of tuples, then does a round-robin assignments of
--- these tasks to parents.
+-- these tasks to parents. If any tasks remain un-assigned, this function will
+-- return them.
 assignTuples ::
     [(Int, String)]         -- tuples that will be assigned
-    -> [(String, Int, Int)] -- parents
+    -> [(String, Int, Int)] -- parents (pIp, pPort, pLatestCounter)
     -> [C.Chan (PullTask)]  -- pull threads input channel
     -> Int                  -- counter to help distribute the tuples evenly
-    -> IO ()
-assignTuples [] _ _ _ = do
-    return ()
-assignTuples _ [] _ _ = do
+    -> [(Int, String)]      -- accumulator to save the unassigned tuples
+    -> IO ([(Int, String)])
+assignTuples [] _ _ _ unag = do
+    return unag
+assignTuples _ [] _ _ unag = do
     putStrLn "[pulltask] No parents available for assignTuples!"
-assignTuples _ _ [] _ = do
+    >> return unag
+assignTuples _ _ [] _ unag = do
     putStrLn "[pulltask] No thread channels available for assignTuples!"
-assignTuples ((tSeq, tDig):xt) parents channels cnt = do
-        putStrLn $ "[pulltask] Assigning (" ++ (show tSeq) ++ ", " ++ (show tDig) ++
-            ") to parent (" ++ (show parIp) ++ ", " ++ (show parPort) ++
-            ") and thread " ++ (show idxChannels)
-        C.writeChan chan $ PullTask { ptParentIp = parIp
-                                    , ptParentPort = parPort
-                                    , ptFrameSeqNr = tSeq
-                                    , ptFrameDigest = tDig
-                                    , ptStatus = Nothing}
-        assignTuples xt parents channels $ cnt+1
+    >> return unag
+assignTuples ((tSeq, tDig):xt) prntz chnlz cnt unag = do
+        -- We assign the task to a random node if the counter is >= seq number;
+        -- Otherwise: if the counter of the top parent is >= seq number, then
+        -- assign to the top parent, else save the task and assign it later.
+        if rndCntr >= tSeq
+            then
+                assignToParent rndIp rndPort
+                >> assignTuples xt prntz chnlz (cnt+1) unag
+            else if topCntr >= tSeq
+                then
+                    assignToParent topIp topPort
+                    >> assignTuples xt prntz chnlz (cnt+1) unag
+                else assignTuples xt prntz chnlz (cnt+1) $ (tSeq, tDig):unag
     where
-        idxParents = cnt `mod` (length parents)
-        idxChannels = cnt `mod` (length channels)
-        (parIp, parPort, _) = parents  !! idxParents
-        chan                = channels !! idxChannels
+        idxParents = cnt `mod` (length prntz)
+        idxChannels = cnt `mod` (length chnlz)
+        chan = chnlz !! idxChannels
+        -- A random parent
+        (rndIp, rndPort, rndCntr) = prntz !! idxParents
+        -- The top parent, having the highest counter
+        (topIp, topPort, topCntr) = head prntz
+        -- Assigns a tuple to a given parent (ip, port)
+        assignToParent ip port = do
+            C.writeChan chan $ PullTask { ptParentIp = ip
+                                        , ptParentPort = port
+                                        , ptFrameSeqNr = tSeq
+                                        , ptFrameDigest = tDig
+                                        , ptStatus = Nothing}
+            putStrLn $ "[pulltask] Assigning (" ++ (show tSeq) ++ ", " ++
+                    (show tDig) ++ ") to parent (" ++ (show ip) ++ ", " ++
+                    (show port) ++ ", " ++ (show topCntr) ++ ") and thread " ++
+                    (show idxChannels)
 
 
 --------------------------------------------------------------------------------
