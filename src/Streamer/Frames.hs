@@ -18,9 +18,6 @@ verifyDigest digest content
 
 persistFrame :: Int -> L.ByteString -> IO ()
 persistFrame seqNr content = do
-    putStrLn $ "Persisting frame "
-             ++ (show $ seqNr) ++ " in "
-             ++ (getFramePersistPath $ seqNr)
     L.writeFile (getFramePersistPath seqNr) content
 
 

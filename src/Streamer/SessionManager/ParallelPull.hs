@@ -164,7 +164,7 @@ assignTuples ((tSeq, tDig):xt) prntz chnlz cnt unag = do
                 then
                     assignToParent topIp topPort
                     >> assignTuples xt prntz chnlz (cnt+1) unag
-                else assignTuples xt prntz chnlz (cnt+1) $ (tSeq, tDig):unag
+                else assignTuples xt prntz chnlz (cnt+1) $ unag++[(tSeq, tDig)]
     where
         idxParents = cnt `mod` (length prntz)
         idxChannels = cnt `mod` (length chnlz)
