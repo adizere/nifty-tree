@@ -76,7 +76,7 @@ startParallelPull parents digChan _ = do
     (inChans, outChans) <- sparkPullThreads parallelism
     failedTasksChan     <- BCH.newBoundedChan failedTasksChanLength
     _ <- forkIO (assignPullTasks parents digChan failedTasksChan inChans [])
-    collectPullTasks failedTasksChan outChans
+    collectPullTasks failedTasksChan outChans 0
 
 
 --------------------------------------------------------------------------------
@@ -193,24 +193,32 @@ assignTuples ((tSeq, tDig):xt) prntz chnlz cnt unag = do
 collectPullTasks ::
     BCH.BoundedChan (PullTask)      -- failed tasks
     -> [STC.TChan (PullTask)]       -- output of pull threads
+    -> Int                          -- max sequence number seen so far
     -> IO ()
-collectPullTasks failedTasksChan pullThreadsOChan =
-    forever $ do
-        mapM_ (extractTask failedTasksChan) pullThreadsOChan
-        threadDelay 100000
+collectPullTasks fC pC mS = do
+        readySeqNr <- mapM (extractTask fC) pC
+        let (should, newMS) = shouldUpdateCounter readySeqNr mS
+        if (should == True)
+            then updLocalCntr newMS >> collectPullTasks fC pC newMS
+            else threadDelay 100000 >> collectPullTasks fC pC mS
     where
         -- Writes the sequnce number to the local counter file
-        updateLocalCounter s =
+        updLocalCntr s =
             withFile localCounterPath WriteMode (\h -> hPutStr h $ show s)
+        shouldUpdateCounter r m =
+            if (1 `elem` r) || ((maximum r) > m)
+                then (True, maximum r) else (False, 0)
         extractTask fChan oChan = do
             empt <- atomically $ STC.isEmptyTChan oChan
             if empt
-                then return ()
+                then return 0
                 else do
                     a <- atomically $ STC.readTChan oChan
                     if (ptStatus a == Just True)
-                        then updateLocalCounter (ptFrameSeqNr a)
-                        else BCH.writeChan fChan a
+                        then return (ptFrameSeqNr a)
+                        -- This was a failed task, so resubmit it throuth the
+                        -- failed Tasks channel to the 'assignPullTasks'
+                        else BCH.writeChan fChan a >> return 0
 
 
 --------------------------------------------------------------------------------
@@ -309,7 +317,7 @@ executePullTask task = do
     bytes <- pullBytes (ptParentIp task) parentListeningPort seqNr
     if verifyDigest (ptFrameDigest task) bytes == True
         then persistFrame seqNr bytes >> return (Just seqNr)
-        else putStrLn "Invalid digest!" >> return Nothing
+        else putStrLn ((show seqNr) ++ ": Invalid digest!") >> return Nothing
     where
         seqNr = ptFrameSeqNr task
 

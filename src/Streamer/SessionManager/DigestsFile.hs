@@ -61,14 +61,14 @@ collectDigestFileEntries ::
     -> Int                      -- limit on the number of returned entries
     -> [(Int,String)]           -- accumulator
     -> IO [(Int, String)]
-collectDigestFileEntries _    _             0     accum = return accum
-collectDigestFileEntries chan skipSeqNrList limit accum = do
-    mEntry <- getDigestFileEntry chan skipSeqNrList
+collectDigestFileEntries _    _             0 ac = return ac
+collectDigestFileEntries c skipSeq l ac = do
+    mEntry <- getDigestFileEntry c skipSeq
     case mEntry of
         Just entry ->
-            collectDigestFileEntries chan skipSeqNrList (limit-1) (entry:accum)
+            collectDigestFileEntries c skipSeq (l-1) (ac++[entry])
         Nothing ->
-            return accum
+            return ac
 
 
 --------------------------------------------------------------------------------
