@@ -39,10 +39,10 @@ function reload_service_code()
     git pull >> "${output}" 2>&1
 
     echo " * " `date` "Installing dependencies" >> "${output}"
-    cabal install --only-dependencies >> "${output}" 2>&1
+    cabal --config-file=/root/.cabal/config install --only-dependencies >> "${output}" 2>&1
 
     echo " * " `date` "Building executable.." >> "${output}"
-    cabal build >> "${output}" 2>&1
+    cabal --config-file=/root/.cabal/config build >> "${output}" 2>&1
 
     echo " * " `date` "Finished reloading" >> "${output}"
 }
