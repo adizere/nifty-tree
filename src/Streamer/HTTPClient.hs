@@ -57,9 +57,9 @@ constructCounterURL pIp pPort =
 
 
 httpGetCounter :: String -> B.ByteString -> IO (Maybe (Int, B.ByteString))
-httpGetCounter url etag = do
+httpGetCounter url etg = do
     putStrLn $ "[pchecker] Getting the counter with URL: " ++ url
-                ++ " and etag: " ++ (C.unpack etag)
+                ++ " and etg: " ++ (C.unpack etg)
     maybeResp <- H.simpleHTTP req
     case maybeResp of
         Left _      -> return Nothing
@@ -70,10 +70,10 @@ httpGetCounter url etag = do
                 then (assembleResult (maybeRead $ HB.rspBody resp) etagValue)
                 else return Nothing
         where
-            req = replaceHeader HdrIfNoneMatch (C.unpack etag) $ H.getRequest url
+            req = replaceHeader HdrIfNoneMatch (C.unpack etg) $ H.getRequest url
             assembleResult mCounter etagVal =
                 case mCounter
-                    of Just counterValue -> return $ Just (counterValue, etagVal)
+                    of Just counterVal -> return $ Just (counterVal, etagVal)
                        Nothing    -> return $ Nothing
 
 
@@ -84,6 +84,7 @@ getETagFromResponse response =
         Nothing -> B.empty
     where
         etagValue = findHeader HdrETag response
+
 
 validateCounterReponse :: H.Response String -> IO Bool
 validateCounterReponse rsp = do

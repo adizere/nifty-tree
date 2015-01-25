@@ -48,6 +48,15 @@ localCounterPath :: FilePath
 localCounterPath = framesPersistPrefix ++ "counter"
 
 
+-- | Retry delay, when we get a 404
+retryDelay :: Int
+retryDelay = 100000
+
+
+-- | Retry limit: how many time try to pull bytes in case of HTTP server error
+retryLimit :: Int
+retryLimit = 3
+
 --------------------------------------------------------------------------------
 -- Data Types
 
@@ -314,10 +323,13 @@ executePullTask ::
     -> IO (Maybe Int)
 executePullTask task = do
     -- The port that serves frames is predefined: parentListeningPort = 80
-    bytes <- pullBytes (ptParentIp task) parentListeningPort seqNr
+    bytes <- pullBytes (ptParentIp task) parentListeningPort seqNr retryLimit
     if verifyDigest (ptFrameDigest task) bytes == True
         then persistFrame seqNr bytes >> return (Just seqNr)
-        else putStrLn ((show seqNr) ++ ": Invalid digest!") >> return Nothing
+        else
+            putStrLn ((show seqNr) ++ ": Invalid frame! (len="
+                        ++ (show $ L.length bytes) ++ ")")
+            >> return Nothing
     where
         seqNr = ptFrameSeqNr task
 
@@ -331,12 +343,16 @@ pullBytes ::
     String  -- IP of the parent
     -> Int  -- port of the parent
     -> Int  -- sequence number of the frame that will be pulled
+    -> Int  -- retry limit
     -> IO (L.ByteString)
-pullBytes ip port seqNr = do
+pullBytes ip port seqNr retry = do
     result <- httpGetFrameBytes $ constructFrameURL ip port seqNr
     case result of
         Just bytes  -> return bytes
-        Nothing     -> return L.empty
+        Nothing     ->
+            if retry > 0
+                then threadDelay retryDelay >> pullBytes ip port seqNr (retry-1)
+                else return L.empty
 
 
 --------------------------------------------------------------------------------
