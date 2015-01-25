@@ -158,11 +158,11 @@ assignTuples ((tSeq, tDig):xt) prntz chnlz cnt unag = do
         -- assign to the top parent, else save the task and assign it later.
         if rndCntr >= tSeq
             then
-                assignToParent rndIp rndPort
+                assignToParent rndIp rndPort rndCntr
                 >> assignTuples xt prntz chnlz (cnt+1) unag
             else if topCntr >= tSeq
                 then
-                    assignToParent topIp topPort
+                    assignToParent topIp topPort topCntr
                     >> assignTuples xt prntz chnlz (cnt+1) unag
                 else assignTuples xt prntz chnlz (cnt+1) $ unag++[(tSeq, tDig)]
     where
@@ -174,7 +174,7 @@ assignTuples ((tSeq, tDig):xt) prntz chnlz cnt unag = do
         -- The top parent, having the highest counter
         (topIp, topPort, topCntr) = head prntz
         -- Assigns a tuple to a given parent (ip, port)
-        assignToParent ip port = do
+        assignToParent ip port leCntr = do
             C.writeChan chan $ PullTask { ptParentIp = ip
                                         , ptParentPort = port
                                         , ptFrameSeqNr = tSeq
@@ -182,7 +182,7 @@ assignTuples ((tSeq, tDig):xt) prntz chnlz cnt unag = do
                                         , ptStatus = Nothing}
             putStrLn $ "[pulltask] Assigning (" ++ (show tSeq) ++ ", " ++
                     (show tDig) ++ ") to parent (" ++ (show ip) ++ ", " ++
-                    (show port) ++ ", " ++ (show topCntr) ++ ") and thread " ++
+                    (show port) ++ ", " ++ (show leCntr) ++ ") and thread " ++
                     (show idxChannels)
 
 
@@ -230,7 +230,7 @@ getTopKParents ::
     -> Int                          -- number of parents to return
     -> [(String, Int, Int)]         -- accumulator
     -> IO [(String, Int, Int)]
-getTopKParents [] k accum = return $ take k accum
+getTopKParents []     k accum = return $ take k accum
 getTopKParents (p:xp) k accum = do
     ignore <- readMVar $ pIgnore p
     -- First, we check the Ignore flag.
@@ -239,14 +239,14 @@ getTopKParents (p:xp) k accum = do
         -- If the parent is not ignored, insert it in the accumulator list.
         else do
             tup <- parentToTuple p
-            getTopKParents xp k $ R.insertSetBy compareByCounter tup accum
+            getTopKParents xp k $ R.insertBagBy compareByCounter tup accum
     where
         parentToTuple pa = do
             cnt <- readMVar $ pLatestCounter pa
             return (pIp pa, pPort pa, cnt)
-        -- The accumulator list is ordered by the counter value.
+        -- The accumulator list is ordered descendingly by the counter value.
         compareByCounter (_, _, cnt1) (_, _, cnt2) =
-            compare cnt1 cnt2
+            compare cnt2 cnt1 -- descending order
 
 
 --------------------------------------------------------------------------------
