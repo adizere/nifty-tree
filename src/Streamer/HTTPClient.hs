@@ -22,7 +22,7 @@ httpGetFrameBytes url = do
     isValid <- validateFrameResponse rsp
     if isValid == True
         then H.getResponseBody rsp >>= (\rsBody -> return $ Just rsBody)
-        else return Nothing
+        else putStrLn ("Invalid response for " ++ (show url)) >> return Nothing
 
 
 validateFrameResponse :: Result (H.Response L.ByteString) -> IO Bool
@@ -30,10 +30,7 @@ validateFrameResponse rsp = do
     responseCode <- H.getResponseCode rsp
     if responseCode == (2,0,0)
         then return True
-        else do
-            putStrLn $ "Error executing request. Response code: "
-                       ++ (show responseCode)
-            return False
+        else return False
 
 
 simpleLazyRequest
@@ -58,8 +55,6 @@ constructCounterURL pIp pPort =
 
 httpGetCounter :: String -> B.ByteString -> IO (Maybe (Int, B.ByteString))
 httpGetCounter url etg = do
-    putStrLn $ "[pchecker] Getting the counter with URL: " ++ url
-                ++ " and etg: " ++ (C.unpack etg)
     maybeResp <- H.simpleHTTP req
     case maybeResp of
         Left _      -> return Nothing

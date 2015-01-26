@@ -50,6 +50,9 @@ consumeDgstFile p s q = do
             h <- openFile p ReadMode
             hSeek h AbsoluteSeek s
             lz <- hGetContents h
+            putStrLn $ "Consumed from " ++ (show s) ++ " until "
+                    ++ (show $ newS stat) ++ "; total: "
+                    ++ (show $ length (lines lz))
             mapM_ (\l -> atomically $ STQ.writeTQueue q l) $ lines lz
             consumeDgstFile p (newS stat) q
     where
@@ -89,7 +92,8 @@ getDigestFileEntry queue = do
             let maybeFmTuple = digestLineToFrameMetadata digestLine
             case maybeFmTuple of
                 Just (seqNr, digest) -> return $ Just (seqNr, digest)
-                Nothing -> return Nothing
+                Nothing -> putStrLn ("Couldn't parse line: " ++ show digestLine)
+                           >> return Nothing
         Nothing -> return Nothing
 
 

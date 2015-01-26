@@ -236,14 +236,16 @@ checkParents pSelection =
         return ()
 
 
--- | Performs the check of one given parent, updating the coresponing record
+-- | Performs the check of one given parent, updating the coresponding record
 -- fields of counter and ETag.
 checkOneParent :: Parent -> IO ()
 checkOneParent cp = do
-    -- putStrLn $ "[pchecker] Checking parent " ++ show cp
     cEtag <- readMVar (pLatestETag cp)
     mCntr <- httpGetCounter
                 (constructCounterURL (pIp cp) parentListeningPort) cEtag
+    putStrLn $ "[pchecker] Checking parent "
+                ++ (constructCounterURL (pIp cp) parentListeningPort)
+                ++ "; got: " ++ (show mCntr)
     case mCntr of
         Just (counter, etag) ->
             (swapMVar (pLatestCounter cp) counter)

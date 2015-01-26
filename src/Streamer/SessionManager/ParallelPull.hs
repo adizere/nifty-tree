@@ -51,7 +51,7 @@ localCounterPath = framesPersistPrefix ++ "counter"
 
 -- | Retry delay, when we get a 404
 retryDelay :: Int
-retryDelay = 100000
+retryDelay = 300000
 
 
 -- | Retry limit: how many time try to pull bytes in case of HTTP server error
@@ -134,6 +134,8 @@ getParentsAndAssign ::
     -> IO ([(Int, String)])
 getParentsAndAssign parents tp chnlz = do
     topParents <- getTopKParents parents parallelism []
+    putStrLn $ "-- Using parents:" ++ (show topParents) ++ "-- for tuples:"
+            ++ (show tp) ++ "--"
     if null topParents
         then do
             threadDelay 500000
@@ -352,7 +354,11 @@ pullBytes ip port seqNr retry = do
         Just bytes  -> return bytes
         Nothing     ->
             if retry > 0
-                then threadDelay retryDelay >> pullBytes ip port seqNr (retry-1)
+                then do
+                    putStrLn $ "We shall retry: (" ++ (show retry) ++ ") for "
+                             ++ (show $ constructFrameURL ip port seqNr)
+                    threadDelay (retryDelay*(retryLimit-retry+1) )
+                    >> pullBytes ip port seqNr (retry-1)
                 else return L.empty
 
 
