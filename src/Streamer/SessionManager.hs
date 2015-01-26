@@ -7,7 +7,6 @@ import Streamer.SessionManager.DigestsFile  ( consumeDgstFile )
 
 import Control.Concurrent.BoundedChan
 import Control.Concurrent               ( forkIO )
-import System.IO                        ( IOMode(ReadMode), openFile )
 
 
 -- Path to the file holding the list of digests
@@ -36,9 +35,8 @@ instance Show SessionManager where
 startSessionManager :: SessionManager -> IO ()
 startSessionManager sManager = do
     putStrLn $ "Selected parents: " ++ (show $ smParents sManager)
-    h    <- openFile digestsFilePath ReadMode
     chan <- newBoundedChan digestsChanLength
-    _    <- forkIO (consumeDgstFile h chan 0)
+    _    <- forkIO (consumeDgstFile digestsFilePath 0 chan)
     _    <- forkIO (checkParents $ smParents sManager)
     startParallelPull (psList $ smParents sManager)
                       chan

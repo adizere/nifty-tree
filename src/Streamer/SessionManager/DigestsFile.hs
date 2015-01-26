@@ -4,17 +4,23 @@ module Streamer.SessionManager.DigestsFile
 ) where
 
 
-import qualified Control.Concurrent.BoundedChan as BCH
-import qualified Data.List.Ordered              as R
 import Data.Maybe
 import Streamer.Util                            ( maybeRead )
 import Control.Concurrent                       ( threadDelay )
-import System.IO                                ( Handle, hGetLine, hIsEOF )
+import System.IO                                ( IOMode(ReadMode)
+                                                , openFile
+                                                , hSeek
+                                                , SeekMode(AbsoluteSeek)
+                                                , hGetContents )
+import System.Posix.Files                       ( getFileStatus, fileSize )
+import qualified Control.Concurrent.BoundedChan as BCH
+import qualified Data.List.Ordered              as R
+
 
 
 -- How much to wait if the digests file EOF found, in microseconds
 consumeDigestsFileDelay :: Int
-consumeDigestsFileDelay = 500000
+consumeDigestsFileDelay = 400000
 
 
 -- | Consumes lines from a digest file and appends the lines to a BoundedChan.
@@ -30,24 +36,28 @@ consumeDigestsFileDelay = 500000
 -- >    chan    <- newBoundedChan 10
 -- >    forkIO (consumeDgstFile handle chan)
 --
--- Note: Apparently, BoundedChan is not exception safe (i.e. we can't do
+-- NB: Apparently, BoundedChan is not exception safe (i.e. we can't do
 -- killThread on the thread executing consumeDgstFile). For an exception safe
 -- chan: Control.Concurrent.Chan (http://stackoverflow.com/a/9250200/919383)
+--
+-- NB2: Rewritten using example from: https://gist.github.com/ijt/1055731.
 consumeDgstFile ::
-    Handle                      -- file handle that contains digests
-    -> BCH.BoundedChan (String) -- channel where digests are queued
-    -> Int                      -- first x lines will be skipped
+    FilePath                    -- ^ Path to the file which contains digests
+    -> Integer                  -- ^ Last known position in the file
+    -> BCH.BoundedChan (String) -- ^ Channel where we queue the digests
     -> IO ()
-consumeDgstFile h c skipNr = do
-    isEof <- hIsEOF h
-    if isEof == True
-        then threadDelay consumeDigestsFileDelay
+consumeDgstFile p s c = do
+    stat <- getFileStatus p
+    if (newS stat) <= s
+        then threadDelay consumeDigestsFileDelay >> consumeDgstFile p s c
         else do
-            line <- hGetLine h
-            if skipNr > 0
-                then consumeDgstFile h c $ skipNr - 1
-                else BCH.writeChan c line
-    consumeDgstFile h c 0
+            h <- openFile p ReadMode
+            hSeek h AbsoluteSeek s
+            lz <- hGetContents h
+            mapM_ (\l -> BCH.writeChan c l) $ lines lz
+            consumeDgstFile p (newS stat) c
+    where
+        newS stt = fromIntegral $ fileSize stt :: Integer
 
 
 -- | Collects entries from the digest file until either K are found or there is
