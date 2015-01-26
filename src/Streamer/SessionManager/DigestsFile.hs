@@ -13,8 +13,8 @@ import System.IO                                ( IOMode(ReadMode)
                                                 , SeekMode(AbsoluteSeek)
                                                 , hGetContents )
 import System.Posix.Files                       ( getFileStatus, fileSize )
-import qualified Control.Concurrent.BoundedChan as BCH
-import qualified Data.List.Ordered              as R
+import Control.Monad.STM                        ( atomically )
+import qualified Control.Concurrent.STM.TQueue  as STQ
 
 
 
@@ -23,39 +23,35 @@ consumeDigestsFileDelay :: Int
 consumeDigestsFileDelay = 400000
 
 
--- | Consumes lines from a digest file and appends the lines to a BoundedChan.
--- Takes as arguments a file handle and a BoundedChan and a number. The third
--- parameter indicates how many lines to initially skip before starting to
--- append to the BoundedChan.
+-- | Consumes lines from a digest file and appends the lines to an TQueue. Takes
+-- as arguments a FilePath, a TQueue, and a number representing the position in
+-- file where it should start consuming, usually 0. The third parameter
+-- indicates how many bytes to initially skip before starting to append to the
+-- TQueue.
 --
 -- This function never returns (it will continue to call itself recursively),
 -- therefore it should execute in its own thread.
 --
 -- Example:
--- >    handle  <- openFile "/tmp/a" ReadMode
--- >    chan    <- newBoundedChan 10
--- >    forkIO (consumeDgstFile handle chan)
+-- >    queue   <- STQ.newTQueueIO :: IO (STQ.TQueue String)
+-- >    forkIO (consumeDgstFile "/tmp/a" 0 queue)
 --
--- NB: Apparently, BoundedChan is not exception safe (i.e. we can't do
--- killThread on the thread executing consumeDgstFile). For an exception safe
--- chan: Control.Concurrent.Chan (http://stackoverflow.com/a/9250200/919383)
---
--- NB2: Rewritten using example from: https://gist.github.com/ijt/1055731.
+-- NB: Rewritten using example from: https://gist.github.com/ijt/1055731.
 consumeDgstFile ::
     FilePath                    -- ^ Path to the file which contains digests
     -> Integer                  -- ^ Last known position in the file
-    -> BCH.BoundedChan (String) -- ^ Channel where we queue the digests
+    -> STQ.TQueue (String)      -- ^ Queue where we redirect the digests
     -> IO ()
-consumeDgstFile p s c = do
+consumeDgstFile p s q = do
     stat <- getFileStatus p
     if (newS stat) <= s
-        then threadDelay consumeDigestsFileDelay >> consumeDgstFile p s c
+        then threadDelay consumeDigestsFileDelay >> consumeDgstFile p s q
         else do
             h <- openFile p ReadMode
             hSeek h AbsoluteSeek s
             lz <- hGetContents h
-            mapM_ (\l -> BCH.writeChan c l) $ lines lz
-            consumeDgstFile p (newS stat) c
+            mapM_ (\l -> atomically $ STQ.writeTQueue q l) $ lines lz
+            consumeDgstFile p (newS stat) q
     where
         newS stt = fromIntegral $ fileSize stt :: Integer
 
@@ -66,50 +62,40 @@ consumeDgstFile p s c = do
 --
 -- Uses: 'getDigestFileEntry'
 collectDigestFileEntries ::
-    BCH.BoundedChan (String)    -- channel with digest lines
-    -> [Int]                    -- list of sequence numbers to be ignored
+    STQ.TQueue (String)         -- queue with digest lines
     -> Int                      -- limit on the number of returned entries
     -> [(Int,String)]           -- accumulator
     -> IO [(Int, String)]
-collectDigestFileEntries _    _             0 ac = return ac
-collectDigestFileEntries c skipSeq l ac = do
-    mEntry <- getDigestFileEntry c skipSeq
+collectDigestFileEntries _ 0 ac = return ac
+collectDigestFileEntries q l ac = do
+    mEntry <- getDigestFileEntry q
     case mEntry of
-        Just entry ->
-            collectDigestFileEntries c skipSeq (l-1) (ac++[entry])
-        Nothing ->
-            return ac
+        Just entry  -> collectDigestFileEntries q (l-1) (ac++[entry])
+        Nothing     -> return ac
 
 
 --------------------------------------------------------------------------------
 -- | Reads the next entry from the digest file. An entry has the form of a tuple
 -- (sequence number, digest).
--- The digest file is represented as a fifo queue (Bounded Chan).
--- The second parameter is a list of Int representing sequence numbers that this
--- function shall skip (if encountered in the fifo queue).
+-- The digest file is represented as a fifo queue (STM.TQueue).
 -- Non-blockin function: if there is no entry available, it returns Nothing.
 getDigestFileEntry ::
-    BCH.BoundedChan (String)    -- channel with digest lines
-    -> [Int]                    -- list of sequence numbers to be ignored
+    STQ.TQueue (String)          -- queue with digest lines
     -> IO (Maybe (Int, String))
-getDigestFileEntry chan skipSeqNrList = do
-    mLine <- BCH.tryReadChan chan
+getDigestFileEntry queue = do
+    mLine <- atomically $ STQ.tryReadTQueue queue
     case mLine of
         Just digestLine -> do
             let maybeFmTuple = digestLineToFrameMetadata digestLine
             case maybeFmTuple of
-                Just (seqNr, digest) -> do
-                    if R.member seqNr skipSeqNrList
-                        -- if we should skip this entry, call the function again
-                        then getDigestFileEntry chan skipSeqNrList
-                        else return $ Just (seqNr, digest)
-                Nothing -> getDigestFileEntry chan skipSeqNrList
+                Just (seqNr, digest) -> return $ Just (seqNr, digest)
+                Nothing -> return Nothing
         Nothing -> return Nothing
 
 
 --------------------------------------------------------------------------------
--- | Takes a line from the digests file and parses it, yielding a sequence
--- number and the associated digest.
+-- | Takes a string (as read from the digests file) and parses it, yielding a
+-- sequence number and the associated digest.
 --
 -- For example,
 -- >    digestLineToFrameMetadata

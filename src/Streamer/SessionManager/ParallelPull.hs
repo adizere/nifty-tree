@@ -21,6 +21,7 @@ import qualified Data.ByteString.Lazy           as L
 import qualified Data.List.Ordered              as R
 import qualified Control.Concurrent.Chan        as C
 import qualified Control.Concurrent.STM.TChan   as STC
+import qualified Control.Concurrent.STM.TQueue  as STQ
 import qualified Control.Concurrent.BoundedChan as BCH
 
 
@@ -78,13 +79,13 @@ data PullTask = PullTask
 -- frames (i.e., PullTask) sequentially.
 startParallelPull ::
     [Parent]                       -- list of all parents
-    -> BCH.BoundedChan (String)    -- digests channel
+    -> STQ.TQueue (String)         -- digests channel
     -> [Int]                       -- frames consumed so far
     -> IO ()
-startParallelPull parents digChan _ = do
+startParallelPull parents digQu _ = do
     (inChans, outChans) <- sparkPullThreads parallelism
     failedTasksChan     <- BCH.newBoundedChan failedTasksChanLength
-    _ <- forkIO (assignPullTasks parents digChan failedTasksChan inChans [])
+    _ <- forkIO (assignPullTasks parents digQu failedTasksChan inChans [])
     collectPullTasks failedTasksChan outChans 0
 
 
@@ -93,12 +94,12 @@ startParallelPull parents digChan _ = do
 -- on the input channel of that PullThread.
 assignPullTasks ::
     [Parent]                        -- parent to which we can assign tasks
-    -> BCH.BoundedChan (String)     -- digests for tasks come through here
+    -> STQ.TQueue (String)          -- digests for tasks come through here
     -> BCH.BoundedChan (PullTask)   -- failed tasks come through here
     -> [C.Chan (PullTask)]          -- pull threads input channel
     -> [(Int, String)]              -- unassigned tasks (in the form of tuples)
     -> IO ()
-assignPullTasks prntz digChan fTChan pTIChan unag = do
+assignPullTasks prntz digQu fTChan pTIChan unag = do
         -- Get the failed tasks.
         fTasks <- fetchFailedTasks fTChan failedTasksFetchLimit []
         -- Ignore the parents corresponding to failed tasks.
@@ -109,14 +110,14 @@ assignPullTasks prntz digChan fTChan pTIChan unag = do
             map (\t -> (ptParentIp t, ptParentPort t)) fTasks
         -- Fetch any new frame (tuple) from the digest file.
         let faildTups = getTuples fTasks
-        ntriz <- collectDigestFileEntries digChan [] 10 []
+        ntriz <- collectDigestFileEntries digQu 10 []
         newUnag <- getParentsAndAssign prntz (unag++ntriz++faildTups) pTIChan
         if (null fTasks) && (null ntriz) && (null newUnag)
             then
             -- If there were no tasks, then we can rest a bit
                 threadDelay 300000
-                >> assignPullTasks prntz digChan fTChan pTIChan newUnag
-            else assignPullTasks prntz digChan fTChan pTIChan newUnag
+                >> assignPullTasks prntz digQu fTChan pTIChan newUnag
+            else assignPullTasks prntz digQu fTChan pTIChan newUnag
         where
             -- Transforms failed PullTask into tuples of (SeqNr, Digest).
             getTuples ftu = map (\t -> (ptFrameSeqNr t, ptFrameDigest t)) ftu

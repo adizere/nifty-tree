@@ -5,18 +5,13 @@ import Streamer.Parents
 import Streamer.SessionManager.ParallelPull ( startParallelPull )
 import Streamer.SessionManager.DigestsFile  ( consumeDgstFile )
 
-import Control.Concurrent.BoundedChan
-import Control.Concurrent               ( forkIO )
+import Control.Concurrent                           ( forkIO )
+import qualified Control.Concurrent.STM.TQueue      as STQ
 
 
 -- Path to the file holding the list of digests
 digestsFilePath :: FilePath
 digestsFilePath = "/opt/streamer/digests.list"
-
-
--- Length of the BoundedChan which holds the digests
-digestsChanLength :: Int
-digestsChanLength = 5
 
 
 data SessionManager = SessionManager
@@ -35,10 +30,10 @@ instance Show SessionManager where
 startSessionManager :: SessionManager -> IO ()
 startSessionManager sManager = do
     putStrLn $ "Selected parents: " ++ (show $ smParents sManager)
-    chan <- newBoundedChan digestsChanLength
-    _    <- forkIO (consumeDgstFile digestsFilePath 0 chan)
-    _    <- forkIO (checkParents $ smParents sManager)
+    queue <- STQ.newTQueueIO :: IO (STQ.TQueue String)
+    _     <- forkIO (consumeDgstFile digestsFilePath 0 queue)
+    _     <- forkIO (checkParents $ smParents sManager)
     startParallelPull (psList $ smParents sManager)
-                      chan
+                      queue
                       (smFramesSeqNr sManager)
     return ()
