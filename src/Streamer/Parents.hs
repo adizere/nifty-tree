@@ -250,5 +250,6 @@ checkOneParent cp = do
         Just (counter, etag) ->
             (swapMVar (pLatestCounter cp) counter)
             -- >>= (\v -> putStrLn $ "[pchecker] Previous val was: " ++ (show v))
-            >> (swapMVar (pLatestETag cp) etag) >> return ()
+            -- >> (swapMVar (pLatestETag cp) etag)
+            >> return ()
         Nothing -> return ()

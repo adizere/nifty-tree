@@ -134,8 +134,8 @@ getParentsAndAssign ::
     -> IO ([(Int, String)])
 getParentsAndAssign parents tp chnlz = do
     topParents <- getTopKParents parents parallelism []
-    putStrLn $ "-- Using parents:" ++ (show topParents) ++ "-- for tuples:"
-            ++ (show tp) ++ "--"
+    -- putStrLn $ "-- Using parents:" ++ (show topParents) ++ "-- for tuples:"
+    --         ++ (show tp) ++ "--"
     if null topParents
         then do
             threadDelay 500000
