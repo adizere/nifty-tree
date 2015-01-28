@@ -56,7 +56,7 @@ retryDelay = 300000
 
 -- | Retry limit: how many time try to pull bytes in case of HTTP server error
 retryLimit :: Int
-retryLimit = 3
+retryLimit = 0
 
 --------------------------------------------------------------------------------
 -- Data Types
@@ -392,6 +392,8 @@ ignoreParents _       []              = return ()
 ignoreParents parents ((ip, port):xs) = do
     putStrLn $ "Warning: Ignoring parent: " ++ ip ++ ":" ++ (show port)
     mapM_ (\p -> if (pIp p == ip) && (pPort p == port)
-                then swapMVar (pIgnore p) True >> return ()
+                then -- swapMVar (pIgnore p) True >> return ()
+                     -- Instead of totally ignoring the parent, counter <- 0
+                    swapMVar (pLatestCounter p) 0 >> return ()
                 else return ()) parents
     ignoreParents parents xs
